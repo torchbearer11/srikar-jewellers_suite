@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Srikar Jewellers - Business Suite</title>
+    <link rel="icon" type="image/jpeg" href="logo.jpeg">
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -12,19 +13,67 @@
         * {margin: 0;padding: 0;box-sizing: border-box;}
         body {font-family: 'Poppins', sans-serif;background-color: var(--dark-bg);color: var(--text-secondary);min-height: 100vh; line-height: 1.6;}
         
-        #portalSelectionScreen { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; text-align: center; padding: 2rem; background: var(--dark-bg); animation: fadeIn 0.8s ease-out; }
+        /* === LOGO BACKGROUND STYLES START HERE === */
+        #portalSelectionScreen { 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            justify-content: center; 
+            min-height: 100vh; 
+            text-align: center; 
+            padding: 2rem; 
+            background-color: var(--dark-bg); 
+            animation: fadeIn 0.8s ease-out;
+            position: relative;
+            z-index: 1;
+        }
+        #portalSelectionScreen::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background-image: url('logo.jpeg');
+            background-position: center;
+            background-repeat: no-repeat;
+            background-size: 250px;
+            opacity: 0.1;
+            z-index: -1;
+        }
+        .container {
+            position: relative;
+            z-index: 1;
+            overflow: hidden; /* This keeps the pseudo-element contained */
+        }
+        .container::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 80%;
+            height: 80%;
+            background-image: url('logo.jpeg');
+            background-position: center;
+            background-repeat: no-repeat;
+            background-size: contain;
+            opacity: 0.03; /* Very subtle watermark effect */
+            z-index: -1;
+            pointer-events: none;
+        }
+        /* === LOGO BACKGROUND STYLES END HERE === */
+
         .portal-header { margin-bottom: 3rem; }
         .portal-header h1 { font-family: 'Cormorant Garamond', serif; font-size: 4rem; color: var(--gold-primary); }
         .portal-header p { font-size: 1.2rem; color: var(--text-secondary); }
         .portal-choices { display: flex; flex-wrap: wrap; justify-content: center; gap: 2rem; }
-        .portal-card { background: var(--dark-secondary); border: 1px solid rgba(220, 202, 135, 0.15); border-radius: 20px; padding: 3rem 2rem; width: 300px; cursor: pointer; transition: all 0.3s ease; }
+        .portal-card { background: var(--dark-secondary); border: 1px solid rgba(220, 202, 135, 0.15); border-radius: 20px; padding: 3rem 2rem; width: 300px; cursor: pointer; transition: all 0.3s ease; background-color: rgba(24, 24, 24, 0.8); backdrop-filter: blur(5px); }
         .portal-card:hover { transform: translateY(-10px); box-shadow: 0 10px 30px rgba(0,0,0,0.5); border-color: var(--gold-primary); }
         .portal-card i { font-size: 3.5rem; color: var(--gold-primary); margin-bottom: 1.5rem; }
         .portal-card h2 { font-family: 'Cormorant Garamond', serif; font-size: 2rem; color: var(--gold-secondary); margin-bottom: 0.5rem; }
         .portal-card p { color: var(--text-secondary); }
 
         .app-portal { display: none; }
-        .container {max-width: 1800px;margin: 1rem;background: var(--dark-secondary);border: 1px solid rgba(220, 202, 135, 0.15);border-radius: 20px;overflow: hidden;}
+        .container {max-width: 1800px;margin: 1rem;background: var(--dark-secondary);border: 1px solid rgba(220, 202, 135, 0.15);border-radius: 20px;}
         .header {padding: 2rem 1.5rem;background: #111111;border-bottom: 1px solid rgba(220, 202, 135, 0.15);display: flex;align-items: center;justify-content: space-between;flex-wrap: wrap; gap: 1rem;}
         .header-text h1 {font-family: 'Cormorant Garamond', serif;font-size: 2.5rem;color: var(--gold-primary);}
         .logo-container .logo {width: 60px;height: 60px;border-radius: 50%;border: 2px solid var(--gold-primary);box-shadow: 0 0 20px rgba(220, 202, 135, 0.3);}
@@ -131,6 +180,7 @@
         <div class="container">
             <header class="header">
                 <div class="header-text"><h1>Insta CRM</h1><p>Professional CRM | Bhimavaram</p></div>
+                 <div class="logo-container"><img src="logo.jpeg" alt="Logo" class="logo"></div>
                 <button class="btn btn-secondary" onclick="showPortalSelection()"><i class="fas fa-home"></i> Main Menu</button>
             </header>
             <div class="nav-tabs">
@@ -155,6 +205,7 @@
         <div class="container">
             <header class="header">
                 <div class="header-text"><h1>Order Management</h1><p>Track Custom Orders & Production</p></div>
+                <div class="logo-container"><img src="logo.jpeg" alt="Logo" class="logo"></div>
                 <button class="btn btn-secondary" onclick="showPortalSelection()"><i class="fas fa-home"></i> Main Menu</button>
             </header>
             <div class="nav-tabs">
@@ -357,9 +408,6 @@
                 if (document.querySelector('#analytics.tab-content.active')) { this.renderCharts(filtered); }
             },
             
-            // =================================================
-            // === FIX STARTS HERE: UPDATED FILTERING LOGIC ===
-            // =================================================
             getFilteredCustomers() {
                 const searchTerm = document.getElementById('searchInput').value.toLowerCase().trim();
                 const statusFilter = document.getElementById('statusFilter').value;
@@ -378,9 +426,6 @@
                     return matchesSearch && matchesStatus && matchesProduct;
                 });
             },
-            // ===============================================
-            // === FIX ENDS HERE =============================
-            // ===============================================
 
             displayCustomers(filteredCustomers) {
                 const tableBody = document.getElementById('customerTableBody');
@@ -812,7 +857,7 @@
         * {margin: 0;padding: 0;box-sizing: border-box;}
         body {font-family: 'Poppins', sans-serif;background-color: var(--dark-bg);color: var(--text-secondary);min-height: 100vh; line-height: 1.6;}
         
-        /* === LOGO BACKGROUND STYLES START HERE === */
+        /* === BOLDER LOGO BACKGROUND STYLES START === */
         #portalSelectionScreen { 
             display: flex; 
             flex-direction: column; 
@@ -834,14 +879,14 @@
             background-image: url('logo.jpeg');
             background-position: center;
             background-repeat: no-repeat;
-            background-size: 250px;
-            opacity: 0.1;
+            background-size: 450px; /* Increased size */
+            opacity: 0.2; /* Increased opacity */
             z-index: -1;
         }
         .container {
             position: relative;
             z-index: 1;
-            overflow: hidden; /* This keeps the pseudo-element contained */
+            overflow: hidden;
         }
         .container::before {
             content: '';
@@ -849,17 +894,17 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            width: 80%;
-            height: 80%;
+            width: 95%; /* Increased size */
+            height: 95%;
             background-image: url('logo.jpeg');
             background-position: center;
             background-repeat: no-repeat;
             background-size: contain;
-            opacity: 0.03; /* Very subtle watermark effect */
+            opacity: 0.07; /* Increased opacity */
             z-index: -1;
             pointer-events: none;
         }
-        /* === LOGO BACKGROUND STYLES END HERE === */
+        /* === BOLDER LOGO BACKGROUND STYLES END === */
 
         .portal-header { margin-bottom: 3rem; }
         .portal-header h1 { font-family: 'Cormorant Garamond', serif; font-size: 4rem; color: var(--gold-primary); }
@@ -875,7 +920,17 @@
         .container {max-width: 1800px;margin: 1rem;background: var(--dark-secondary);border: 1px solid rgba(220, 202, 135, 0.15);border-radius: 20px;}
         .header {padding: 2rem 1.5rem;background: #111111;border-bottom: 1px solid rgba(220, 202, 135, 0.15);display: flex;align-items: center;justify-content: space-between;flex-wrap: wrap; gap: 1rem;}
         .header-text h1 {font-family: 'Cormorant Garamond', serif;font-size: 2.5rem;color: var(--gold-primary);}
-        .logo-container .logo {width: 60px;height: 60px;border-radius: 50%;border: 2px solid var(--gold-primary);box-shadow: 0 0 20px rgba(220, 202, 135, 0.3);}
+        
+        /* === BOLDER HEADER LOGO STYLE START === */
+        .logo-container .logo {
+            width: 80px; 
+            height: 80px;
+            border-radius: 50%;
+            border: 4px solid var(--gold-primary); /* Thicker border */
+            box-shadow: 0 0 30px rgba(220, 202, 135, 0.6); /* Stronger glow */
+        }
+        /* === BOLDER HEADER LOGO STYLE END === */
+        
         .nav-tabs {background: var(--dark-secondary);padding: 0 1rem;display: flex;border-bottom: 1px solid rgba(220, 202, 135, 0.1);overflow-x: auto;}
         .nav-tabs button {background: transparent;border: none;padding: 1.2rem 1rem;font-size: 1rem;cursor: pointer;color: var(--text-secondary);border-bottom: 3px solid transparent;transition: var(--transition-fast);white-space: nowrap;}
         .nav-tabs button:hover, .nav-tabs button.active {color: var(--gold-primary);}
@@ -1021,6 +1076,8 @@
     </div>
     
     <script>
+        // The JavaScript section remains unchanged from the previous version.
+        // All necessary functionality is handled by the updated CSS.
         // === GLOBAL UTILITIES (Shared by both apps) ===
         function showNotification(message, isSuccess = true) {
             const notification = document.createElement('div');
