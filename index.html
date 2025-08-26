@@ -823,6 +823,8 @@
     </script>
 </body>
 </html>
+
+ 
  -->
  <!DOCTYPE html>
 <html lang="en">
@@ -837,6 +839,8 @@
 
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-storage-compat.js"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/browser-image-compression@2.0.1/dist/browser-image-compression.js"></script>
 
     <style>
         :root {--gold-primary: #DCCA87;--gold-secondary: #F5EFE1;--dark-bg: #0C0C0C;--dark-secondary: #181818;--text-primary: #FFFFFF;--text-secondary: #AAAAAA;--danger-red: #d9534f; --transition-fast: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); --status-pending: #f0ad4e; --status-progress: #5bc0de; --status-completed: #5cb85c; --status-delivered: #8a6de9;}
@@ -1015,7 +1019,7 @@
     </div>
     
     <script>
-        // Initialize Firebase
+        // UPDATED: Replace YOUR_... values with the keys from Netlify Environment Variables
         const firebaseConfig = {
             apiKey: "YOUR_VITE_FIREBASE_API_KEY",
             authDomain: "YOUR_VITE_FIREBASE_AUTH_DOMAIN",
@@ -1024,8 +1028,16 @@
             messagingSenderId: "YOUR_VITE_FIREBASE_MESSAGING_SENDER_ID",
             appId: "YOUR_VITE_FIREBASE_APP_ID"
         };
-        firebase.initializeApp(firebaseConfig);
-        const storage = firebase.storage();
+        
+        // Initialize Firebase
+        if (firebaseConfig.apiKey !== "YOUR_VITE_FIREBASE_API_KEY") {
+            firebase.initializeApp(firebaseConfig);
+            const storage = firebase.storage();
+        } else {
+            console.error("Firebase config is not set. Please add your credentials.");
+            // Optionally, disable features that require Firebase
+        }
+        
 
         // === GLOBAL UTILITIES (Shared by both apps) ===
         function showNotification(message, isSuccess = true) {
@@ -1167,7 +1179,6 @@
                 const button = form.querySelector('button[type="submit"]');
                 toggleButtonLoading(button, true, button.innerHTML);
                 
-                // UPDATED: Find customer ID from datalist value
                 const inputValue = form.elements.updateCustomerIdInput.value;
                 const customer = this.customers.find(c => `${c.name} - ${c.phone}` === inputValue);
                 
@@ -1206,7 +1217,7 @@
                     this.closeModal();
                     await this.loadAllDataFromServer();
                 }
-                toggleButtonLoading(button, false, '<i class="fas fa-save"></i> Update Customer');
+                toggleButtonLoading(button, false, '<i class="fas fa-save"></i> Save Customer');
             },
 
             async handleDeleteCustomer(customerId) {
@@ -1221,7 +1232,7 @@
                 this.displayCustomers(filtered);
                 this.displayDailyUpdates();
                 this.displayFollowUps();
-                this.populateUpdateCustomerDatalist(); // UPDATED
+                this.populateUpdateCustomerDatalist();
                 this.populateProductDatalist();
                 this.populateHistoryDatalist();
                 this.updateAnalyticsDashboard(filtered);
@@ -1281,7 +1292,6 @@
                 const today = this.customers.filter(c => c.nextFollowUp && new Date(c.nextFollowUp) >= todayStart && new Date(c.nextFollowUp) <= todayEnd);
                 const upcoming = this.customers.filter(c => c.nextFollowUp && new Date(c.nextFollowUp) > todayEnd);
                 
-                // UPDATED: Render function now includes contact links
                 const renderList = (custs, isOverdue = false) => {
                     if (custs.length === 0) return `<p style="text-align: center;">None</p>`;
                     return custs.map(c => `
@@ -1302,7 +1312,6 @@
                 document.getElementById('upcomingFollowUps').innerHTML = renderList(upcoming);
             },
 
-            // NEW FUNCTION for daily updates customer selection
             populateUpdateCustomerDatalist() {
                 const datalist = document.getElementById('updateCustomerDatalist');
                 if(!this.customers || !datalist) return;
@@ -1474,7 +1483,7 @@
             renderAll() {
                 this.renderOrders();
                 this.populateWorkerDatalist();
-                this.populateOverseenByList(); // UPDATED
+                this.populateOverseenByList();
                 this.updateDashboard();
                  if (document.querySelector('#order-dashboard.tab-content.active')) { this.renderCharts(); }
             },
@@ -1486,7 +1495,6 @@
                 workerDatalist.innerHTML = uniqueWorkers.map(name => `<option value="${name}"></option>`).join('');
             },
 
-            // NEW FUNCTION for Overseen By datalist
             populateOverseenByList() {
                 const allKnownOrders = [...this.orders, ...this.archivedOrders];
                 const datalist = document.getElementById('overseenByList');
@@ -1512,7 +1520,6 @@
                 document.getElementById('imageModal').addEventListener('click', () => this.closeModal('imageModal'));
             },
             
-            // UPDATED: No more Base64 conversion
             async handleAddOrder(e) {
                 e.preventDefault();
                 const form = e.target;
@@ -1522,17 +1529,25 @@
                 const imageFile = form.elements.itemPicture.files[0];
                 let itemPictureUrl = null;
 
-                // NEW: Firebase Storage Upload Logic
+                // UPDATED: Image Compression and Firebase Storage Upload Logic
                 if (imageFile) {
+                    const options = {
+                        maxSizeMB: 0.5, // Compress to a max of 500KB
+                        maxWidthOrHeight: 1024, // Resize to a max of 1024px on the longest side
+                        useWebWorker: true
+                    };
                     try {
+                        showNotification('Compressing image...', true);
+                        const compressedFile = await imageCompression(imageFile, options);
+                        
                         showNotification('Uploading image...', true);
-                        const filePath = `images/${Date.now()}_${imageFile.name}`;
+                        const filePath = `images/${Date.now()}_${compressedFile.name}`;
                         const fileRef = storage.ref(filePath);
-                        const snapshot = await fileRef.put(imageFile);
+                        const snapshot = await fileRef.put(compressedFile);
                         itemPictureUrl = await snapshot.ref.getDownloadURL();
                         showNotification('Image uploaded!', true);
                     } catch (error) {
-                        showNotification("Image upload failed: " + error.message, false);
+                        showNotification("Image processing failed: " + error.message, false);
                         toggleButtonLoading(button, false, '<i class="fas fa-save"></i> Save Order');
                         return;
                     }
@@ -1550,7 +1565,7 @@
                     assignedTo: form.elements.assignedTo.value.trim(), 
                     specifications: form.elements.specifications.value.trim(), 
                     modifications: form.elements.modifications.value.trim(), 
-                    itemPictureUrl: itemPictureUrl, // This is now a URL
+                    itemPictureUrl: itemPictureUrl,
                     status: 'Pending', 
                     customerNotes: [], 
                     dateAdded: new Date().toISOString()
@@ -1576,12 +1591,10 @@
                 let filteredOrders = this.orders.filter(o => {
                     const matchesSearch = !searchTerm || o.orderNumber.toString().includes(searchTerm) || o.customerName.toLowerCase().includes(searchTerm) || o.phoneNumber.includes(searchTerm);
                     
-                    // UPDATED: Visibility logic for Vasu Garu / Staff
                     let matchesAssignment = false;
                     if (showVasuGaru) {
                         matchesAssignment = o.assignedTo === 'Vasu Garu';
                     } else {
-                        // Staff sees their own orders, AND Vasu Garu's orders if a worker is assigned
                         matchesAssignment = o.assignedTo === 'Staff' || (o.assignedTo === 'Vasu Garu' && o.workerName);
                     }
                     
