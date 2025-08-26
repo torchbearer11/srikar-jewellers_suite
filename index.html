@@ -181,810 +181,6 @@
     </div>
     
     <script>
-        // The JavaScript section remains unchanged.
-        // === GLOBAL UTILITIES (Shared by both apps) ===
-        function showNotification(message, isSuccess = true) {
-            const notification = document.createElement('div');
-            notification.className = 'premium-notification';
-            notification.innerHTML = `<i class="fas fa-${isSuccess ? 'check-circle' : 'times-circle'}"></i> ${message}`;
-            document.body.appendChild(notification);
-            setTimeout(() => { if (notification.parentNode) notification.parentNode.removeChild(notification); }, 5000);
-        }
-
-        function toggleButtonLoading(button, isLoading, defaultButtonText = '') {
-            if(button){ 
-                button.disabled = isLoading; 
-                if(isLoading) { 
-                    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; 
-                } else if (defaultButtonText) { 
-                    button.innerHTML = defaultButtonText; 
-                }
-            }
-        }
-
-        function formatPhoneForWhatsApp(phone) { 
-            let cleaned = (phone || '').replace(/\D/g, ''); 
-            if (cleaned.length === 10) { cleaned = '91' + cleaned; } 
-            return cleaned; 
-        }
-
-        // === PORTAL NAVIGATION ===
-        const portalSelectionScreen = document.getElementById('portalSelectionScreen');
-        const crmPortal = document.getElementById('crmPortal');
-        const orderPortal = document.getElementById('orderPortal');
-        let isCrmInitialized = false;
-        let isOrderInitialized = false;
-
-        function showPortal(portalName) {
-            portalSelectionScreen.style.display = 'none';
-            crmPortal.style.display = 'none';
-            orderPortal.style.display = 'none';
-
-            if (portalName === 'crm') {
-                crmPortal.style.display = 'block';
-                if (!isCrmInitialized) {
-                    crmApp.init();
-                    isCrmInitialized = true;
-                }
-            } else if (portalName === 'order') {
-                orderPortal.style.display = 'block';
-                if (!isOrderInitialized) {
-                    orderApp.init();
-                    isOrderInitialized = true;
-                }
-            }
-        }
-
-        function showPortalSelection() {
-            crmPortal.style.display = 'none';
-            orderPortal.style.display = 'none';
-            portalSelectionScreen.style.display = 'flex';
-        }
-
-        // ===================================================================================
-        // ================================ INSTA CRM APP ====================================
-        // ===================================================================================
-        const crmApp = {
-            customers: [],
-            dailyUpdates: [],
-            charts: {},
-            modal: null,
-
-            init() {
-                this.modal = document.getElementById('crmUpdateModal');
-                this.showTab('add-customer', document.querySelector('#crmPortal .tab-button'));
-                this.loadAllDataFromServer();
-                this.setupEventListeners();
-            },
-
-            async handleApiRequest(endpoint, body, successMessage) {
-                try {
-                    const response = await fetch(`/.netlify/functions/${endpoint}`, {
-                        method: 'POST',
-                        body: JSON.stringify(body)
-                    });
-                    if (!response.ok) {
-                        const err = await response.json();
-                        throw new Error(err.message || 'Server request failed');
-                    }
-                    showNotification(successMessage, true);
-                    return true;
-                } catch (error) {
-                    showNotification(`Error: ${error.message}`, false);
-                    return false;
-                }
-            },
-
-            async loadAllDataFromServer() {
-                try {
-                    const response = await fetch('/.netlify/functions/get-all-data'); 
-                    if (!response.ok) throw new Error('Server error!');
-                    const data = await response.json();
-                    
-                    this.customers = (data.customers || []).map(c => ({...c, id: c.id}));
-                    this.dailyUpdates = (data.dailyUpdates || []).map(u => ({...u, id: u.id}));
-                    
-                    this.customers.sort((a, b) => new Date(b.dateAdded) - new Date(a.dateAdded));
-                    this.dailyUpdates.sort((a, b) => new Date(b.date) - new Date(a.date));
-                    this.renderAll();
-                } catch (error) { showNotification("Could not load CRM data from the cloud.", false); }
-            },
-
-            setupEventListeners() {
-                document.getElementById('customerForm').addEventListener('submit', (e) => this.handleAddCustomer(e));
-                document.getElementById('dailyUpdateForm').addEventListener('submit', (e) => this.handleAddDailyUpdate(e));
-                document.getElementById('updateForm').addEventListener('submit', (e) => this.handleUpdateCustomer(e));
-                document.getElementById('historySearchInput').addEventListener('input', (e) => this.handleHistorySearchInput(e));
-                this.modal.addEventListener('click', (e) => { if (e.target === this.modal) this.closeModal(); });
-            },
-            
-            async handleAddCustomer(e) {
-                e.preventDefault();
-                const form = e.target;
-                const button = form.querySelector('button[type="submit"]');
-                toggleButtonLoading(button, true, button.innerHTML);
-                const newCustomer = {
-                    dateAdded: new Date().toISOString(),
-                    name: form.elements.customerName.value.trim(), phone: form.elements.phoneNumber.value.trim(), email: form.elements.email.value.trim(), location: form.elements.location.value.trim(), adSource: form.elements.adSource.value, interestedProduct: form.elements.interestedProduct.value.trim(), budget: form.elements.budget.value, leadStatus: form.elements.leadStatus.value, priority: form.elements.priority.value, nextFollowUp: form.elements.nextFollowUp.value,
-                    notes: [{ date: new Date().toISOString(), text: form.elements.initialResponse.value.trim() }]
-                };
-                if (await this.handleApiRequest('add-customer', newCustomer, 'Customer saved!')) {
-                    form.reset();
-                    await this.loadAllDataFromServer();
-                }
-                toggleButtonLoading(button, false, '<i class="fas fa-save"></i> Save Customer');
-            },
-
-            async handleAddDailyUpdate(e) {
-                e.preventDefault();
-                const form = e.target;
-                const button = form.querySelector('button[type="submit"]');
-                toggleButtonLoading(button, true, button.innerHTML);
-                const newUpdate = {
-                    date: new Date().toISOString(), customerId: form.elements.updateCustomerId.value, supportPerson: form.elements.supportPerson.value.trim(), interactionType: form.elements.callStatus.value, comment: form.elements.dailyComment.value.trim(),
-                };
-                const customer = this.customers.find(c => c.id === newUpdate.customerId);
-                if (customer) newUpdate.customerName = customer.name;
-                if (!newUpdate.customerId) { showNotification("Please select a customer.", false); toggleButtonLoading(button, false, '<i class="fas fa-comment-medical"></i> Add Update'); return; }
-                if (await this.handleApiRequest('add-daily-update', newUpdate, 'Update saved!')) {
-                    form.reset();
-                    await this.loadAllDataFromServer();
-                }
-                toggleButtonLoading(button, false, '<i class="fas fa-comment-medical"></i> Add Update');
-            },
-
-            async handleUpdateCustomer(e) {
-                e.preventDefault();
-                const form = e.target;
-                const button = form.querySelector('button[type="submit"]');
-                toggleButtonLoading(button, true, button.innerHTML);
-                const customerId = document.getElementById('updateCustomerIdModal').value;
-                const updatedData = {
-                    name: document.getElementById('updateName').value.trim(), phone: document.getElementById('updatePhone').value.trim(), email: document.getElementById('updateEmail').value.trim(), location: document.getElementById('updateLocation').value.trim(), leadStatus: document.getElementById('updateStatus').value, priority: document.getElementById('updatePriority').value, nextFollowUp: document.getElementById('updateFollowUp').value,
-                };
-                if (await this.handleApiRequest('update-customer', { id: customerId, data: updatedData }, 'Customer updated!')) {
-                    this.closeModal();
-                    await this.loadAllDataFromServer();
-                }
-                toggleButtonLoading(button, false, '<i class="fas fa-save"></i> Update Customer');
-            },
-
-            async handleDeleteCustomer(customerId) {
-                if (!confirm('Are you sure you want to delete this customer? This cannot be undone.')) return;
-                if (await this.handleApiRequest('delete-customer', { id: customerId }, 'Customer deleted.')) {
-                    await this.loadAllDataFromServer();
-                }
-            },
-
-            renderAll() {
-                const filtered = this.getFilteredCustomers();
-                this.displayCustomers(filtered);
-                this.displayDailyUpdates();
-                this.displayFollowUps();
-                this.populateCustomerSelectors();
-                this.populateProductDatalist();
-                this.populateHistoryDatalist();
-                this.updateAnalyticsDashboard(filtered);
-                if (document.querySelector('#analytics.tab-content.active')) { this.renderCharts(filtered); }
-            },
-            
-            getFilteredCustomers() {
-                const searchTerm = document.getElementById('searchInput').value.toLowerCase().trim();
-                const statusFilter = document.getElementById('statusFilter').value;
-                const productFilter = document.getElementById('productFilter').value.toLowerCase().trim();
-
-                return this.customers.filter(customer => {
-                    const matchesSearch = !searchTerm ? true :
-                        (customer.name && customer.name.toLowerCase().includes(searchTerm)) ||
-                        (customer.phone && customer.phone.includes(searchTerm));
-
-                    const matchesStatus = !statusFilter ? true : customer.leadStatus === statusFilter;
-
-                    const matchesProduct = !productFilter ? true :
-                        (customer.interestedProduct && customer.interestedProduct.toLowerCase().includes(productFilter));
-
-                    return matchesSearch && matchesStatus && matchesProduct;
-                });
-            },
-
-            displayCustomers(filteredCustomers) {
-                const tableBody = document.getElementById('customerTableBody');
-                document.getElementById('customerTableHeader').innerHTML = `<tr><th>Customer</th><th>Contact</th><th>Interest</th><th>Status</th><th>Next Follow-up</th><th>Actions</th></tr>`;
-                if (filteredCustomers.length === 0) { tableBody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 2rem;">No customers match filters.</td></tr>'; return; }
-                tableBody.innerHTML = filteredCustomers.map(cust => `
-                    <tr>
-                        <td data-label="Customer"><strong>${cust.name}</strong><br><small>${cust.location || 'N/A'}</small></td>
-                        <td data-label="Contact" class="contact-links">
-                            <a href="tel:${cust.phone}" class="phone-link"><i class="fas fa-phone"></i> Call</a>
-                            <a href="https://wa.me/${formatPhoneForWhatsApp(cust.phone)}" class="whatsapp-link" target="_blank"><i class="fab fa-whatsapp"></i> WhatsApp</a>
-                        </td>
-                        <td data-label="Interest">${cust.interestedProduct || 'N/A'}</td>
-                        <td data-label="Status">${cust.leadStatus}</td>
-                        <td data-label="Next Follow-up">${cust.nextFollowUp || 'N/A'}</td>
-                        <td data-label="Actions">
-                            <button class="btn btn-secondary" style="padding: 5px 10px;" onclick="crmApp.openUpdateModal('${cust.id}')"><i class="fas fa-edit"></i></button>
-                            <button class="btn btn-danger" style="padding: 5px 10px;" onclick="crmApp.handleDeleteCustomer('${cust.id}')"><i class="fas fa-trash"></i></button>
-                        </td>
-                    </tr>`).join('');
-            },
-            
-            displayDailyUpdates() {
-                const list = document.getElementById('dailyUpdatesList');
-                if (this.dailyUpdates.length === 0) { list.innerHTML = '<p style="text-align:center;">No recent updates.</p>'; return; }
-                list.innerHTML = this.dailyUpdates.slice(0, 25).map(update => {
-                    const customer = this.customers.find(c => c.id === update.customerId);
-                    return `<div style="border-left: 3px solid var(--gold-primary); padding-left: 1rem; margin-bottom: 1rem;"><div style="display: flex; justify-content: space-between;"><strong>${update.customerName || (customer ? customer.name : 'Unknown')}</strong><small>${new Date(update.date).toLocaleDateString()}</small></div><p><em>By: ${update.supportPerson} | ${update.interactionType}</em></p><p>${update.comment}</p></div>`;
-                }).join('');
-            },
-
-            displayFollowUps() {
-                const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
-                const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
-                const overdue = this.customers.filter(c => c.nextFollowUp && new Date(c.nextFollowUp) < todayStart);
-                const today = this.customers.filter(c => c.nextFollowUp && new Date(c.nextFollowUp) >= todayStart && new Date(c.nextFollowUp) <= todayEnd);
-                const upcoming = this.customers.filter(c => c.nextFollowUp && new Date(c.nextFollowUp) > todayEnd);
-                const renderList = (custs, isOverdue = false) => {
-                    if (custs.length === 0) return `<p style="text-align: center;">None</p>`;
-                    return custs.map(c => `<div class="follow-up-item ${isOverdue ? 'overdue' : ''}" onclick="crmApp.openUpdateModal('${c.id}')"><strong>${c.name}</strong> (${c.phone})<br><small>Due: ${new Date(c.nextFollowUp).toLocaleDateString()}</small></div>`).join('');
-                };
-                document.getElementById('overdueFollowUps').innerHTML = renderList(overdue, true);
-                document.getElementById('todayFollowUps').innerHTML = renderList(today);
-                document.getElementById('upcomingFollowUps').innerHTML = renderList(upcoming);
-            },
-
-            populateCustomerSelectors() {
-                const selector = document.getElementById('updateCustomerId');
-                selector.innerHTML = '<option value="">Choose Customer...</option>';
-                this.customers.forEach(customer => {
-                    selector.innerHTML += `<option value="${customer.id}">${customer.name} - ${customer.phone}</option>`;
-                });
-            },
-            
-            populateProductDatalist() {
-                const productList = document.getElementById('productList');
-                if(!this.customers || this.customers.length === 0) return;
-                const uniqueProducts = [...new Set(this.customers.map(c => c.interestedProduct).filter(p => p))];
-                productList.innerHTML = uniqueProducts.map(p => `<option value="${p}"></option>`).join('');
-            },
-            
-            populateHistoryDatalist() {
-                const datalist = document.getElementById('historyCustomerList');
-                if(!this.customers || !datalist) return;
-                datalist.innerHTML = this.customers.map(customer => `<option value="${customer.name} - ${customer.phone}" data-id="${customer.id}"></option>`).join('');
-            },
-            
-            handleHistorySearchInput(event) {
-                const value = event.target.value;
-                const options = document.getElementById('historyCustomerList').options;
-                for (let i = 0; i < options.length; i++) {
-                    if (options[i].value === value) {
-                        this.displayFullCustomerHistory(options[i].getAttribute('data-id'));
-                        break;
-                    }
-                }
-            },
-
-            searchAndDisplayHistory() {
-                const value = document.getElementById('historySearchInput').value;
-                const options = document.getElementById('historyCustomerList').options;
-                let customerId = null;
-                for (let i = 0; i < options.length; i++) {
-                    if (options[i].value === value) { customerId = options[i].getAttribute('data-id'); break; }
-                }
-                if (customerId) { this.displayFullCustomerHistory(customerId); } 
-                else { showNotification("Please select a valid customer.", false); }
-            },
-
-            displayFullCustomerHistory(customerId) {
-                const container = document.getElementById('customerHistoryLog');
-                if (!customerId) { container.style.display = 'none'; return; }
-                container.style.display = 'block';
-                const customer = this.customers.find(c => c.id === customerId);
-                const customerUpdates = this.dailyUpdates.filter(u => u.customerId === customerId);
-                const customerNotes = customer.notes || [];
-                const history = [...customerUpdates, ...customerNotes].sort((a,b) => new Date(b.date) - new Date(a.date));
-                if (history.length === 0) { container.innerHTML = '<p>No history recorded.</p>'; return; }
-                container.innerHTML = history.map(item => {
-                    const itemDate = new Date(item.date || item.timestamp).toLocaleString('en-IN');
-                    if (item.text) { 
-                        return `<div style="border-left: 3px solid #5bc0de; padding-left: 1rem; margin-bottom: 1rem;"><strong>Initial Note</strong> <small>(${itemDate})</small><p>${item.text}</p></div>`;
-                    } else {
-                        return `<div style="border-left: 3px solid var(--gold-primary); padding-left: 1rem; margin-bottom: 1rem;"><strong>Update by ${item.supportPerson}</strong> <small>(${itemDate})</small><p><em>Interaction: ${item.interactionType}</em></p><p>${item.comment}</p></div>`;
-                    }
-                }).join('');
-            },
-
-            updateAnalyticsDashboard(filteredCustomers) {
-                const dataSet = filteredCustomers || this.customers;
-                const total = dataSet.length;
-                const converted = dataSet.filter(c => c.leadStatus === 'Converted').length;
-                const today = new Date().toISOString().split('T')[0];
-                const todayUpdatesCount = this.dailyUpdates.filter(u => u.date.startsWith(today)).length;
-                const pendingFollowUps = dataSet.filter(c => c.nextFollowUp && new Date(c.nextFollowUp) < new Date()).length;
-                document.getElementById('totalLeads').textContent = total;
-                document.getElementById('conversionRate').textContent = total > 0 ? `${Math.round((converted/total)*100)}%` : '0%';
-                document.getElementById('todayUpdates').textContent = todayUpdatesCount;
-                document.getElementById('followUpPending').textContent = pendingFollowUps;
-                const sourceCounts = dataSet.reduce((acc, c) => { if (c.adSource) { acc[c.adSource] = (acc[c.adSource] || 0) + 1; } return acc; }, {});
-                const sourceDashboard = document.getElementById('sourceCountDashboard');
-                sourceDashboard.innerHTML = Object.keys(sourceCounts).map(source => `<div class="analytics-card"><h4>${sourceCounts[source]}</h4><p>${source}</p></div>`).join('');
-            },
-            
-            renderCharts(filteredCustomers) {
-                const dataSet = filteredCustomers || this.customers;
-                Object.values(this.charts).forEach(chart => { if (chart.destroy) chart.destroy(); });
-                const chartLabelColor = '#AAAAAA';
-                const statusCounts = dataSet.reduce((acc, c) => { acc[c.leadStatus] = (acc[c.leadStatus] || 0) + 1; return acc; }, {});
-                this.charts.status = new Chart(document.getElementById('statusChart').getContext('2d'), { type: 'doughnut', data: { labels: Object.keys(statusCounts), datasets: [{ data: Object.values(statusCounts), backgroundColor: ['#DCCA87', '#5bc0de', '#5cb85c', '#f0ad4e', '#d9534f', '#8a6de9'] }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: chartLabelColor } } } } });
-                const sourceCounts = dataSet.reduce((acc, c) => { acc[c.adSource] = (acc[c.adSource] || 0) + 1; return acc; }, {});
-                this.charts.source = new Chart(document.getElementById('sourceChart').getContext('2d'), { type: 'pie', data: { labels: Object.keys(sourceCounts), datasets: [{ data: Object.values(sourceCounts), backgroundColor: ['#DCCA87', '#AAAAAA', '#F5EFE1', '#5bc0de', '#5cb85c'] }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: chartLabelColor } } } } });
-            },
-
-            showTab(tabName, element) {
-                document.querySelectorAll('#crmPortal .tab-content').forEach(c => c.classList.remove('active'));
-                document.querySelectorAll('#crmPortal .tab-button').forEach(b => b.classList.remove('active'));
-                document.getElementById(tabName).classList.add('active');
-                element.classList.add('active');
-                if (tabName !== 'add-customer' && tabName !== 'daily-updates') { this.renderAll(); }
-            },
-
-            openUpdateModal(customerId) {
-                const customer = this.customers.find(c => c.id === customerId);
-                if (!customer) return;
-                const form = document.getElementById('updateForm');
-                form.elements.updateCustomerIdModal.value = customer.id; form.elements.updateName.value = customer.name; form.elements.updatePhone.value = customer.phone; form.elements.updateEmail.value = customer.email || ''; form.elements.updateLocation.value = customer.location || ''; form.elements.updateStatus.value = customer.leadStatus; form.elements.updatePriority.value = customer.priority; form.elements.updateFollowUp.value = customer.nextFollowUp || '';
-                this.displayCustomerHistoryInModal(customerId);
-                this.modal.classList.add('show');
-            },
-            
-            displayCustomerHistoryInModal(customerId) {
-                const container = document.getElementById('customerUpdateHistory');
-                const customer = this.customers.find(c => c.id === customerId);
-                const customerUpdates = this.dailyUpdates.filter(u => u.customerId === customerId);
-                const customerNotes = customer.notes || [];
-                const history = [...customerUpdates, ...customerNotes].sort((a,b) => new Date(b.date) - new Date(a.date));
-                if (history.length === 0) { container.innerHTML = '<p>No history for this customer.</p>'; return; }
-                container.innerHTML = history.slice(0, 5).map(item => {
-                    const itemDate = new Date(item.date || item.timestamp).toLocaleString('en-IN');
-                    if (item.text) {
-                        return `<div style="border-left: 3px solid #5bc0de; padding-left: 1rem; margin-bottom: 1rem;"><strong>Initial Note</strong> <small>(${itemDate})</small><p>${item.text}</p></div>`;
-                    } else {
-                        return `<div style="border-left: 3px solid var(--gold-primary); padding-left: 1rem; margin-bottom: 1rem;"><strong>Update by ${item.supportPerson}</strong> <small>(${itemDate})</small><p>${item.comment}</p></div>`;
-                    }
-                }).join('');
-            },
-
-            closeModal() { this.modal.classList.remove('show'); }
-        };
-
-        // ===================================================================================
-        // ============================ ORDER MANAGEMENT APP =================================
-        // ===================================================================================
-        const orderApp = {
-            orders: [],
-            archivedOrders: [],
-            charts: {},
-
-            init() {
-                this.showTab('new-order', document.querySelector('#orderPortal .tab-button'));
-                this.loadAllDataFromServer();
-                this.setupEventListeners();
-            },
-
-            async handleApiRequest(endpoint, body, successMessage) {
-                try {
-                    const response = await fetch(`/.netlify/functions/${endpoint}`, { method: 'POST', body: JSON.stringify(body) });
-                    if (!response.ok) {
-                        const err = await response.json();
-                        throw new Error(err.message || 'Server request failed');
-                    }
-                    showNotification(successMessage, true);
-                    return true;
-                } catch (error) {
-                    showNotification(`Error: ${error.message}`, false);
-                    return false;
-                }
-            },
-
-            async loadAllDataFromServer() {
-                try {
-                    const response = await fetch('/.netlify/functions/get-order-data');
-                    if (!response.ok) throw new Error(`Server error: ${response.statusText}`);
-                    const data = await response.json();
-                    this.orders = (data.orders || []).map(o => ({...o, id: o.id }));
-                    this.archivedOrders = (data.archivedOrders || []).map(o => ({...o, id: o.id }));
-                    this.orders.sort((a, b) => b.orderNumber - a.orderNumber);
-                    this.renderAll();
-                } catch(error) { showNotification(`Could not load Order data from the cloud. ${error.message}`, false); }
-            },
-            
-            renderAll() {
-                this.renderOrders();
-                this.populateWorkerDatalist();
-                this.updateDashboard();
-                 if (document.querySelector('#order-dashboard.tab-content.active')) { this.renderCharts(); }
-            },
-
-            populateWorkerDatalist() {
-                const allKnownOrders = [...this.orders, ...this.archivedOrders];
-                const workerDatalist = document.getElementById('workerDatalist');
-                const uniqueWorkers = [...new Set(allKnownOrders.map(o => o.workerName).filter(Boolean))];
-                workerDatalist.innerHTML = uniqueWorkers.map(name => `<option value="${name}"></option>`).join('');
-            },
-
-            showTab(tabName, element) {
-                document.querySelectorAll('#orderPortal .tab-content').forEach(c => c.classList.remove('active'));
-                document.querySelectorAll('#orderPortal .tab-button').forEach(b => b.classList.remove('active'));
-                document.getElementById(`order-${tabName}`).classList.add('active');
-                element.classList.add('active');
-                this.renderAll();
-            },
-
-            setupEventListeners() {
-                document.getElementById('newOrderForm').addEventListener('submit', (e) => this.handleAddOrder(e));
-                document.getElementById('updateOrderForm').addEventListener('submit', (e) => this.handleUpdateOrder(e));
-                document.getElementById('addNoteBtn').addEventListener('click', () => this.handleAddCustomerNote());
-                document.getElementById('orderUpdateModal').addEventListener('click', (e) => { if (e.target.id === 'orderUpdateModal') this.closeModal('orderUpdateModal'); });
-                document.getElementById('imageModal').addEventListener('click', () => this.closeModal('imageModal'));
-            },
-            
-            fileToBase64(file) {
-                return new Promise((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.readAsDataURL(file);
-                    reader.onload = () => resolve(reader.result);
-                    reader.onerror = error => reject(error);
-                });
-            },
-
-            async handleAddOrder(e) {
-                e.preventDefault();
-                const form = e.target;
-                const button = form.querySelector('button[type="submit"]');
-                toggleButtonLoading(button, true, button.innerHTML);
-                const imageFile = form.elements.itemPicture.files[0];
-                let itemPictureUrl = null;
-                if (imageFile) {
-                    try { itemPictureUrl = await this.fileToBase64(imageFile); } 
-                    catch (error) { showNotification("Could not process image.", false); toggleButtonLoading(button, false, '<i class="fas fa-save"></i> Save Order'); return; }
-                }
-                const newOrder = {
-                    orderNumber: parseInt(form.elements.orderNumber.value), customerName: form.elements.orderCustomerName.value.trim(), phoneNumber: form.elements.orderPhoneNumber.value.trim(), city: form.elements.city.value.trim(), itemName: form.elements.itemName.value.trim(), weight: form.elements.weight.value.trim(), dueDate: form.elements.dueDate.value, workerName: form.elements.workerName.value.trim(), assignedTo: form.elements.assignedTo.value, specifications: form.elements.specifications.value.trim(), modifications: form.elements.modifications.value.trim(), itemPictureUrl: itemPictureUrl, status: 'Pending', customerNotes: [], dateAdded: new Date().toISOString()
-                };
-                if (await this.handleApiRequest('add-order', newOrder, 'Order saved successfully!')) {
-                    form.reset();
-                    await this.loadAllDataFromServer();
-                    this.showTab('order-tracking', document.querySelector('#orderPortal button[onclick*="order-tracking"]'));
-                }
-                toggleButtonLoading(button, false, '<i class="fas fa-save"></i> Save Order');
-            },
-            
-            renderOrders() {
-                const tableBody = document.getElementById('orderTableBody');
-                document.getElementById('orderTableHeader').innerHTML = `<tr><th>Image</th><th>Order #</th><th>Customer</th><th>Contact</th><th>Item</th><th>Worker</th><th>Due Date</th><th>Status</th><th>Actions</th></tr>`;
-                
-                const searchTerm = document.getElementById('orderSearchInput').value.toLowerCase();
-                const specialFilter = document.getElementById('specialFilter').value;
-                const showVasuGaru = document.getElementById('ownerToggle').checked;
-                const today = new Date(); today.setHours(0, 0, 0, 0);
-
-                let filteredOrders = this.orders.filter(o => {
-                    const matchesSearch = !searchTerm || o.orderNumber.toString().includes(searchTerm) || o.customerName.toLowerCase().includes(searchTerm) || o.phoneNumber.includes(searchTerm);
-                    const matchesAssignment = showVasuGaru ? o.assignedTo === 'Vasu Garu' : o.assignedTo === 'Staff';
-                    
-                    let matchesSpecial = false;
-                    if (specialFilter === 'all') { matchesSpecial = o.status !== 'Delivered';
-                    } else if (specialFilter === 'overdue') { matchesSpecial = o.dueDate && new Date(o.dueDate) < today && o.status !== 'Delivered';
-                    } else if (specialFilter === 'unassigned') { matchesSpecial = !o.workerName;
-                    } else if (specialFilter === 'completedNotDelivered') { matchesSpecial = o.status === 'Completed';}
-                    return matchesSearch && matchesAssignment && matchesSpecial;
-                });
-
-                if (filteredOrders.length === 0) {
-                    tableBody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding: 2rem;">No orders match filters.</td></tr>`; return;
-                }
-
-                tableBody.innerHTML = filteredOrders.map(order => {
-                    const isOverdue = order.dueDate && new Date(order.dueDate) < today && order.status !== 'Delivered';
-                    const dueDateHtml = order.dueDate ? `${new Date(order.dueDate).toLocaleDateString('en-IN')} ${isOverdue ? '<i class="fas fa-exclamation-triangle" style="color: var(--danger-red);"></i>' : ''}` : 'N/A';
-                    const imageHtml = order.itemPictureUrl ? `<img src="${order.itemPictureUrl}" class="order-image-thumbnail" onclick="orderApp.openImageModal('${order.id}')">` : `<span>No Image</span>`;
-                    return `
-                    <tr>
-                        <td data-label="Image">${imageHtml}</td>
-                        <td data-label="Order #">${order.orderNumber}</td>
-                        <td data-label="Customer"><strong>${order.customerName}</strong><br><small>${order.city || 'N/A'}</small></td>
-                        <td data-label="Contact" class="contact-links">
-                            <a href="tel:${order.phoneNumber}" class="phone-link"><i class="fas fa-phone"></i> Call</a>
-                            <a href="https://wa.me/${formatPhoneForWhatsApp(order.phoneNumber)}" class="whatsapp-link" target="_blank"><i class="fab fa-whatsapp"></i> WhatsApp</a>
-                        </td>
-                        <td data-label="Item">${order.itemName} (${order.weight}g)</td>
-                        <td data-label="Worker">${order.workerName || '<em>Unassigned</em>'}</td>
-                        <td data-label="Due Date">${dueDateHtml}</td>
-                        <td data-label="Status"><span class="status-badge status-${order.status.replace('-','')}">${order.status}</span></td>
-                        <td data-label="Actions">
-                            <button class="btn btn-primary" style="padding: 5px 10px;" onclick="orderApp.openUpdateModal('${order.id}')"><i class="fas fa-edit"></i></button>
-                        </td>
-                    </tr>`}).join('');
-            },
-            
-            async handleUpdateOrder(e) {
-                e.preventDefault();
-                const button = e.target.querySelector('button[type="submit"]');
-                toggleButtonLoading(button, true, button.innerHTML);
-                const orderId = document.getElementById('updateOrderId').value;
-                const updates = {
-                    status: document.getElementById('updateOrderStatus').value,
-                    workerName: document.getElementById('updateWorkerName').value.trim()
-                };
-                
-                if (await this.handleApiRequest('update-order', { id: orderId, updates: updates }, 'Order updated!')) {
-                    await this.loadAllDataFromServer();
-                }
-                toggleButtonLoading(button, false, '<i class="fas fa-save"></i> Save Changes');
-            },
-
-            async handleAddCustomerNote() {
-                const orderId = document.getElementById('updateOrderId').value;
-                const noteText = document.getElementById('newCustomerNote').value.trim();
-                if (!noteText) { showNotification("Note cannot be empty.", false); return; }
-                const newNote = { text: noteText, timestamp: new Date().toISOString() };
-                
-                if (await this.handleApiRequest('add-order-note', { id: orderId, note: newNote }, 'Note added!')) {
-                    document.getElementById('newCustomerNote').value = '';
-                    await this.loadAllDataFromServer();
-                    const order = this.orders.find(o => o.id === orderId);
-                    this.renderNotesHistory(order ? order.customerNotes : []);
-                }
-            },
-
-            updateDashboard() {
-                const today = new Date(); today.setHours(0, 0, 0, 0);
-                const deliveredInLast24h = this.orders.filter(o => o.status === 'Delivered').length;
-                document.querySelector('#orderAnalyticsDashboard #totalOrders').textContent = this.orders.length + this.archivedOrders.length;
-                document.querySelector('#orderAnalyticsDashboard #pendingOrders').textContent = this.orders.filter(o => o.status === 'Pending').length;
-                document.querySelector('#orderAnalyticsDashboard #inProgressOrders').textContent = this.orders.filter(o => o.status === 'In-Progress').length;
-                document.querySelector('#orderAnalyticsDashboard #overdueCount').textContent = this.orders.filter(o => o.dueDate && new Date(o.dueDate) < today && o.status !== 'Delivered').length;
-                document.querySelector('#orderAnalyticsDashboard #deliveredCount').textContent = this.archivedOrders.length + deliveredInLast24h;
-            },
-
-            renderCharts() {
-                if (this.charts.worker) this.charts.worker.destroy();
-                const allKnownOrders = [...this.orders, ...this.archivedOrders];
-                const workerCounts = allKnownOrders.reduce((acc, order) => {
-                    const worker = order.workerName || 'Unassigned';
-                    acc[worker] = (acc[worker] || 0) + 1;
-                    return acc;
-                }, {});
-
-                this.charts.worker = new Chart(document.getElementById('workerChart').getContext('2d'), {
-                    type: 'bar',
-                    data: { labels: Object.keys(workerCounts), datasets: [{ label: 'Number of Orders', data: Object.values(workerCounts), backgroundColor: '#DCCA87', borderColor: '#F5EFE1', borderWidth: 1 }] },
-                    options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, ticks: { color: '#AAAAAA', stepSize: 1 } }, x: { ticks: { color: '#AAAAAA' } } }, plugins: { legend: { display: false } } }
-                });
-            },
-
-            openUpdateModal(orderId) {
-                const order = this.orders.find(o => o.id === orderId);
-                if (!order) return;
-                document.getElementById('updateOrderId').value = order.id;
-                document.getElementById('updateOrderStatus').value = order.status;
-                document.getElementById('updateWorkerName').value = order.workerName || '';
-                document.getElementById('newCustomerNote').value = '';
-                this.renderNotesHistory(order.customerNotes || []);
-                document.getElementById('orderUpdateModal').classList.add('show');
-            },
-
-            renderNotesHistory(notes) {
-                const historyContainer = document.getElementById('orderUpdateModal').querySelector('#customerNotesHistory');
-                if (!notes || notes.length === 0) {
-                    historyContainer.innerHTML = '<p style="text-align: center;">No notes yet.</p>'; return;
-                }
-                historyContainer.innerHTML = [...notes].reverse().map(note => {
-                    const formattedDate = new Date(note.timestamp).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' });
-                    return `<div class="note-item"><p>${note.text}</p><small>${formattedDate}</small></div>`;
-                }).join('');
-            },
-
-            openImageModal(orderId) {
-                const order = this.orders.find(o => o.id === orderId);
-                if (order && order.itemPictureUrl) {
-                    document.getElementById('fullSizeImage').src = order.itemPictureUrl;
-                    document.getElementById('imageModal').classList.add('show');
-                }
-            },
-            
-            closeModal(modalId) { 
-                const modal = document.getElementById(modalId)
-                if (modal) modal.classList.remove('show');
-            }
-        };
-    </script>
-</body>
-</html>
- -->
- <!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Srikar Jewellers - Business Suite</title>
-    <link rel="icon" type="image/jpeg" href="logo.jpeg">
-    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style>
-        :root {--gold-primary: #DCCA87;--gold-secondary: #F5EFE1;--dark-bg: #0C0C0C;--dark-secondary: #181818;--text-primary: #FFFFFF;--text-secondary: #AAAAAA;--danger-red: #d9534f; --transition-fast: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); --status-pending: #f0ad4e; --status-progress: #5bc0de; --status-completed: #5cb85c; --status-delivered: #8a6de9;}
-        * {margin: 0;padding: 0;box-sizing: border-box;}
-        body {font-family: 'Poppins', sans-serif;background-color: var(--dark-bg);color: var(--text-secondary);min-height: 100vh; line-height: 1.6;}
-        
-        #portalSelectionScreen { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; text-align: center; padding: 2rem; background-color: var(--dark-bg); animation: fadeIn 0.8s ease-out; position: relative; z-index: 1; }
-        #portalSelectionScreen::before { content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-image: url('logo.jpeg'); background-position: center; background-repeat: no-repeat; background-size: 450px; opacity: 0.2; z-index: -1; }
-        .container { position: relative; z-index: 1; overflow: hidden; }
-        .container::before { content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 95%; height: 95%; background-image: url('logo.jpeg'); background-position: center; background-repeat: no-repeat; background-size: contain; opacity: 0.07; z-index: -1; pointer-events: none; }
-
-        .portal-header { margin-bottom: 3rem; }
-        .portal-header h1 { font-family: 'Cormorant Garamond', serif; font-size: 4rem; color: var(--gold-primary); }
-        .portal-header p { font-size: 1.2rem; color: var(--text-secondary); }
-        .portal-choices { display: flex; flex-wrap: wrap; justify-content: center; gap: 2rem; }
-        .portal-card { background: var(--dark-secondary); border: 1px solid rgba(220, 202, 135, 0.15); border-radius: 20px; padding: 3rem 2rem; width: 300px; cursor: pointer; transition: all 0.3s ease; background-color: rgba(24, 24, 24, 0.8); backdrop-filter: blur(5px); }
-        .portal-card:hover { transform: translateY(-10px); box-shadow: 0 10px 30px rgba(0,0,0,0.5); border-color: var(--gold-primary); }
-        .portal-card i { font-size: 3.5rem; color: var(--gold-primary); margin-bottom: 1.5rem; }
-        .portal-card h2 { font-family: 'Cormorant Garamond', serif; font-size: 2rem; color: var(--gold-secondary); margin-bottom: 0.5rem; }
-        .portal-card p { color: var(--text-secondary); }
-
-        .app-portal { display: none; }
-        .container {max-width: 1800px;margin: 1rem;background: var(--dark-secondary);border: 1px solid rgba(220, 202, 135, 0.15);border-radius: 20px;}
-        .header {padding: 2rem 1.5rem;background: #111111;border-bottom: 1px solid rgba(220, 202, 135, 0.15);display: flex;align-items: center;justify-content: space-between;flex-wrap: wrap; gap: 1rem;}
-        .header-text h1 {font-family: 'Cormorant Garamond', serif;font-size: 2.5rem;color: var(--gold-primary);}
-        
-        .logo-container .logo { width: 80px; height: 80px; border-radius: 50%; border: 4px solid var(--gold-primary); box-shadow: 0 0 30px rgba(220, 202, 135, 0.6); }
-        
-        .nav-tabs {background: var(--dark-secondary);padding: 0 1rem;display: flex;border-bottom: 1px solid rgba(220, 202, 135, 0.1);overflow-x: auto;}
-        .nav-tabs button {background: transparent;border: none;padding: 1.2rem 1rem;font-size: 1rem;cursor: pointer;color: var(--text-secondary);border-bottom: 3px solid transparent;transition: var(--transition-fast);white-space: nowrap;}
-        .nav-tabs button:hover, .nav-tabs button.active {color: var(--gold-primary);}
-        .nav-tabs button.active {border-bottom-color: var(--gold-primary);}
-        .nav-tabs button i {margin-right: 0.75rem;}
-        .tab-content {padding: 1.5rem; display: none;}
-        .tab-content.active {display: block; animation: fadeIn 0.6s ease-out;}
-        @keyframes fadeIn {from {opacity: 0;transform: translateY(15px);} to {opacity: 1;transform: translateY(0);}}
-        .section-title {font-family: 'Cormorant Garamond', serif;font-size: 2.2rem;color: var(--gold-primary);margin-bottom: 2rem;text-align: center;}
-        .premium-card {background: #111111;border: 1px solid rgba(220, 202, 135, 0.1);border-radius: 15px;padding: 1.5rem;margin-bottom: 2rem;}
-        .form-grid {display: grid;grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));gap: 1.5rem;}
-        .form-group {display: flex;flex-direction: column;}
-        .form-group label {margin-bottom: 0.75rem;font-weight: 500;color: var(--gold-secondary);font-size: 0.9rem;text-transform: uppercase;}
-        .form-group input, .form-group select, .form-group textarea {width: 100%;padding: 0.8rem 1rem;border: 1px solid rgba(220, 202, 135, 0.2);border-radius: 8px;font-size: 1rem;background: var(--dark-secondary);color: var(--text-primary);transition: var(--transition-fast);}
-        .form-group input:focus, .form-group select:focus, .form-group textarea:focus {outline: none;border-color: var(--gold-primary);}
-        .btn {padding: 0.8rem 1.8rem;border: 1px solid var(--gold-primary);border-radius: 8px;cursor: pointer;font-size: 1rem;font-weight: 600;text-transform: uppercase;transition: var(--transition-fast); display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;}
-        .btn-secondary {background: transparent;color: var(--gold-primary);}
-        .btn-secondary:hover {background: rgba(220, 202, 135, 0.1);}
-        .btn-primary {background: var(--gold-primary);color: var(--dark-bg);}
-        .btn-primary:hover {background: #EADCA6;}
-        .btn-danger {background: var(--danger-red);color: white;border-color: var(--danger-red);}
-        .btn-danger:hover {background: #c9302c;}
-        .btn:disabled {background: #555;border-color: #555;color: #888;cursor: not-allowed;}
-        .premium-table {width: 100%;border-collapse: collapse;background: #111111;border-radius: 15px;overflow: hidden;}
-        .premium-table th, .premium-table td {padding: 1.2rem 1rem;text-align: left;vertical-align: middle; border-bottom: 1px solid rgba(220, 202, 135, 0.1);}
-        .premium-table th {background: var(--dark-secondary);color: var(--gold-primary);text-transform: uppercase;}
-        .premium-table tbody tr:hover {background: var(--dark-secondary);}
-        .order-image-thumbnail {width: 50px; height: 50px; border-radius: 5px; object-fit: cover; cursor: pointer; transition: transform 0.2s ease;}
-        .order-image-thumbnail:hover {transform: scale(1.1);}
-        .contact-links {display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;}
-        .contact-links a {padding: 0.3rem 0.6rem; border-radius: 5px; text-decoration: none; font-size: 0.8rem; display: inline-flex; align-items: center; gap: 0.3rem; transition: var(--transition-fast);}
-        .phone-link { background: rgba(92, 184, 230, 0.1); color: #5cb8e6; border: 1px solid rgba(92, 184, 230, 0.3); }
-        .phone-link:hover { background: rgba(92, 184, 230, 0.2); }
-        .whatsapp-link { background: rgba(37, 211, 102, 0.1); color: #25D366; border: 1px solid rgba(37, 211, 102, 0.3); }
-        .whatsapp-link:hover { background: rgba(37, 211, 102, 0.2); }
-        .status-badge { padding: 0.3rem 0.7rem; border-radius: 20px; color: white; font-size: 0.8rem; font-weight: 500; text-transform: uppercase; }
-        .status-Pending { background-color: var(--status-pending); }
-        .status-In-Progress { background-color: var(--status-progress); }
-        .status-Completed { background-color: var(--status-completed); }
-        .status-Delivered { background-color: var(--status-delivered); }
-        .toggle-switch-container { display: flex; align-items: center; justify-content: flex-end; gap: 1rem; color: var(--gold-secondary); font-weight: 600; }
-        .switch { position: relative; display: inline-block; width: 60px; height: 34px; }
-        .switch input { opacity: 0; width: 0; height: 0; }
-        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #333; transition: .4s; border-radius: 34px; }
-        .slider:before { position: absolute; content: ""; height: 26px; width: 26px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
-        input:checked + .slider { background-color: var(--gold-primary); }
-        input:checked + .slider:before { transform: translateX(26px); }
-        .analytics-dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
-        .analytics-card { background: #1C1C1C; padding: 1.5rem; border-radius: 10px; text-align: center; border-left: 5px solid var(--gold-primary); }
-        .analytics-card h3 { font-size: 2.5rem; color: var(--gold-primary); }
-        .analytics-card p { font-size: 1rem; color: var(--text-secondary); margin-top: 0.5rem; }
-        .chart-container {height: 350px;padding: 1rem;background: #1C1C1C;border-radius: 10px;}
-        .premium-notification {position: fixed;bottom: 20px;left: 50%;transform: translateX(-50%);padding: 1rem 2rem;background: linear-gradient(145deg, #EADCA6 0%, #DCCA87 100%);color: var(--dark-bg);border-radius: 10px;z-index: 9999;font-weight: 600;animation: slideUp 0.5s ease forwards, slideDown 0.5s ease 4.5s forwards;}
-        @keyframes slideUp {from {transform: translate(-50%, 150%);} to {transform: translate(-50%, 0);}}
-        @keyframes slideDown {from {transform: translate(-50%, 0); opacity: 1;} to {transform: translate(-50%, 150%); opacity: 0;}}
-        .modal-premium {position: fixed;top: 0;left: 0;width: 100%;height: 100%;background: rgba(0, 0, 0, 0.7);backdrop-filter: blur(10px);z-index: 1000;display: none;align-items: center;justify-content: center;opacity: 0;transition: opacity 0.4s ease;}
-        .modal-premium.show {display: flex;opacity: 1;}
-        .modal-content {background: var(--dark-secondary);border: 1px solid rgba(220, 202, 135, 0.2);border-radius: 20px;padding: 2rem;width: 95%;max-width: 800px;max-height: 90vh;overflow-y: auto;}
-        #imageModal .modal-content {max-width: 90vw; max-height: 90vh; padding: 0.5rem; overflow: hidden;}
-        #fullSizeImage {max-width: 100%; max-height: calc(90vh - 1rem); display: block; margin: auto;}
-        .filter-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; align-items: flex-end; }
-        .notes-section { margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid rgba(220, 202, 135, 0.15); }
-        #customerNotesHistory { max-height: 200px; overflow-y: auto; padding-right: 10px; margin-bottom: 1.5rem; }
-        .note-item { background: #111; padding: 0.8rem; border-radius: 8px; margin-bottom: 0.8rem; border-left: 3px solid var(--gold-primary); }
-        .note-item p { margin: 0; color: var(--text-primary); }
-        .note-item small { color: var(--text-secondary); font-size: 0.8rem; }
-        @media (max-width: 768px) {
-            .portal-header h1 { font-size: 2.5rem; }
-            .container { margin: 0; border-radius: 0; }
-            .premium-table thead { display: none; }
-            .premium-table, .premium-table tbody, .premium-table tr, .premium-table td { display: block; width: 100%; }
-            .premium-table tr { margin-bottom: 1rem; border: 1px solid rgba(220, 202, 135, 0.15); border-radius: 10px; padding: 1rem; }
-            .premium-table td { padding: 0.75rem 0.5rem; padding-left: 50%; text-align: right; position: relative; border-bottom: 1px solid #222; display: flex; align-items: center; justify-content: flex-end; }
-            .premium-table td:last-child { border-bottom: none; }
-            .premium-table td::before { content: attr(data-label); position: absolute; left: 0.5rem; width: 45%; padding-right: 10px; white-space: nowrap; text-align: left; font-weight: bold; color: var(--gold-secondary); }
-        }
-    </style>
-</head>
-<body>
-
-    <div id="portalSelectionScreen">
-        <div class="portal-header">
-            <h1>Srikar Jewellers</h1>
-            <p>Business Suite</p>
-        </div>
-        <div class="portal-choices">
-            <div class="portal-card" onclick="showPortal('crm')">
-                <i class="fas fa-users"></i>
-                <h2>Insta CRM</h2>
-                <p>Manage Customer Leads & Follow-ups</p>
-            </div>
-            <div class="portal-card" onclick="showPortal('order')">
-                <i class="fas fa-gem"></i>
-                <h2>Order Management</h2>
-                <p>Track Custom Orders & Production</p>
-            </div>
-        </div>
-    </div>
-
-    <div id="crmPortal" class="app-portal">
-        <div class="container">
-            <header class="header">
-                <div class="header-text"><h1>Insta CRM</h1><p>Professional CRM | Bhimavaram</p></div>
-                 <div class="logo-container"><img src="logo.jpeg" alt="Logo" class="logo"></div>
-                <button class="btn btn-secondary" onclick="showPortalSelection()"><i class="fas fa-home"></i> Main Menu</button>
-            </header>
-            <div class="nav-tabs">
-                <button class="tab-button active" onclick="crmApp.showTab('add-customer', this)"><i class="fas fa-plus-circle"></i> Add Customer</button>
-                <button class="tab-button" onclick="crmApp.showTab('daily-updates', this)"><i class="fas fa-comments"></i> Daily Updates</button>
-                <button class="tab-button" onclick="crmApp.showTab('follow-ups', this)"><i class="fas fa-calendar-check"></i> Follow-ups</button>
-                <button class="tab-button" onclick="crmApp.showTab('customer-list', this)"><i class="fas fa-users"></i> Database</button>
-                <button class="tab-button" onclick="crmApp.showTab('history', this)"><i class="fas fa-history"></i> Customer History</button>
-                <button class="tab-button" onclick="crmApp.showTab('analytics', this)"><i class="fas fa-chart-pie"></i> Analytics</button>
-            </div>
-            <div id="add-customer" class="tab-content active"><h2 class="section-title">Record New Lead</h2><div class="premium-card"><form id="customerForm"><div class="form-grid"><div class="form-group"><label for="customerName">Customer Name</label><input type="text" id="customerName"></div><div class="form-group"><label for="phoneNumber">Phone Number *</label><input type="tel" id="phoneNumber" required></div><div class="form-group"><label for="email">Email Address</label><input type="email" id="email"></div><div class="form-group"><label for="location">Location</label><input type="text" id="location"></div><div class="form-group"><label for="adSource">Lead Source</label><select id="adSource"><option value="">Select Source</option><option value="Instagram">Instagram</option><option value="Facebook">Facebook</option><option value="Referral">Referral</option><option value="Walk-in">Walk-in</option><option value="Other">Other</option></select></div><div class="form-group"><label for="interestedProduct">Product of Interest</label><input type="text" id="interestedProduct" list="productList"><datalist id="productList"></datalist></div><div class="form-group"><label for="budget">Estimated Budget</label><select id="budget"><option value="">Select Budget</option><option value="<50k">Under ₹50,000</option><option value="50k-1L">₹50k - ₹1 Lakh</option><option value="1L-3L">₹1 Lakh - ₹3 Lakh</option><option value=">5L">Above ₹5 Lakh</option></select></div><div class="form-group"><label for="leadStatus">Initial Status</label><select id="leadStatus"><option value="New">New</option><option value="Contacted">Contacted</option><option value="Interested">Interested</option><option value="Follow-up">Follow-up</option><option value="Not Interested">Not Interested</option></select></div><div class="form-group"><label for="priority">Priority</label><select id="priority"><option value="Medium">Medium</option><option value="High">High</option><option value="Low">Low</option></select></div><div class="form-group"><label for="nextFollowUp">Next Follow-up</label><input type="date" id="nextFollowUp"></div></div><div class="form-group" style="margin-top:1.5rem;"><label for="initialResponse">Notes</label><textarea id="initialResponse" rows="3"></textarea></div><div style="text-align: center; margin-top: 2rem;"><button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save Customer</button></div></form></div></div>
-            <div id="daily-updates" class="tab-content"><h2 class="section-title">Daily Customer Updates</h2><div class="premium-card"><h3 style="color: var(--gold-primary); margin-bottom: 1.5rem;"><i class="fas fa-plus-circle"></i> Add Daily Update</h3><form id="dailyUpdateForm"><div class="form-grid"><div class="form-group"><label>Select Customer</label><select id="updateCustomerId" required><option value="">Choose Customer...</option></select></div><div class="form-group"><label>Support Person</label><input type="text" id="supportPerson" required></div><div class="form-group"><label>Interaction Type</label><select id="callStatus"><option value="Phone Call">Phone Call</option><option value="WhatsApp">WhatsApp</option><option value="Store Visit">Store Visit</option><option value="Email">Email</option></select></div></div><div class="form-group" style="margin-top: 1rem;"><label>Daily Comment/Update *</label><textarea id="dailyComment" rows="4" required></textarea></div><div style="text-align: center; margin-top: 1.5rem;"><button type="submit" class="btn btn-primary"><i class="fas fa-comment-medical"></i> Add Update</button></div></form></div><div class="premium-card"><h3 style="color: var(--gold-primary); margin-bottom: 1.5rem;"><i class="fas fa-history"></i> Recent Updates</h3><div id="dailyUpdatesList"></div></div></div>
-            <div id="follow-ups" class="tab-content"><h2 class="section-title">Follow-up Schedule</h2><div class="form-grid"><div class="premium-card"><h3><i class="fas fa-fire" style="color:#d9534f;"></i> Overdue</h3><div id="overdueFollowUps"></div></div><div class="premium-card"><h3><i class="fas fa-star" style="color:#f0ad4e;"></i> Today</h3><div id="todayFollowUps"></div></div><div class="premium-card"><h3><i class="fas fa-calendar-day" style="color:#5bc0de;"></i> Upcoming</h3><div id="upcomingFollowUps"></div></div></div></div>
-            <div id="customer-list" class="tab-content"><h2 class="section-title">Customer Database</h2><div class="premium-card"><div class="form-grid"><div class="form-group"><label>Search by Name/Phone</label><input type="text" id="searchInput" oninput="crmApp.renderAll()"></div><div class="form-group"><label>Filter by Status</label><select id="statusFilter" onchange="crmApp.renderAll()"><option value="">All Statuses</option><option value="New">New</option><option value="Contacted">Contacted</option><option value="Interested">Interested</option><option value="Follow-up">Follow-up</option><option value="Converted">Converted</option><option value="Not Interested">Not Interested</option></select></div><div class="form-group"><label>Filter by Product</label><input type="text" id="productFilter" list="productList" oninput="crmApp.renderAll()" placeholder="Type or select product..."></div></div></div><div class="table-container"><table class="premium-table"><thead id="customerTableHeader"></thead><tbody id="customerTableBody"></tbody></table></div></div>
-            <div id="history" class="tab-content"><h2 class="section-title">Full Customer History</h2><div class="premium-card"><div class="form-group"><label>Search Customer by Name or Phone</label><input type="text" id="historySearchInput" list="historyCustomerList" placeholder="Start typing..."><datalist id="historyCustomerList"></datalist></div><div style="text-align:center; margin-top:1rem;"><button class="btn btn-secondary" onclick="crmApp.searchAndDisplayHistory()">Search</button></div></div><div id="customerHistoryLog" class="premium-card" style="display:none;"></div></div>
-            <div id="analytics" class="tab-content"><h2 class="section-title">Business Analytics</h2><div class="analytics-dashboard" id="crmAnalyticsDashboard"><div class="analytics-card"><h3 id="totalLeads">0</h3><p>Total Leads</p></div><div class="analytics-card"><h3 id="conversionRate">0%</h3><p>Conversion Rate</p></div><div class="analytics-card"><h3 id="todayUpdates">0</h3><p>Today's Updates</p></div><div class="analytics-card"><h3 id="followUpPending">0</h3><p>Pending Follow-ups</p></div></div><div class="premium-card"><h3 class="section-title" style="font-size: 1.8rem; margin-bottom: 1.5rem;">Customer Count by Lead Source</h3><div id="sourceCountDashboard" class="form-grid"></div></div><div class="form-grid"><div class="premium-card"><h3 class="section-title" style="font-size: 1.5rem;">Lead Sources</h3><div class="chart-container"><canvas id="sourceChart"></canvas></div></div><div class="premium-card"><h3 class="section-title" style="font-size: 1.5rem;">Lead Status</h3><div class="chart-container"><canvas id="statusChart"></canvas></div></div></div></div>
-        </div>
-        <div id="crmUpdateModal" class="modal-premium"><div class="modal-content"><h2 class="section-title" style="margin-bottom: 1.5rem;">Update Customer & View History</h2><form id="updateForm"><input type="hidden" id="updateCustomerIdModal"><div class="form-grid"><div class="form-group"><label>Customer Name</label><input type="text" id="updateName" required></div><div class="form-group"><label>Phone Number</label><input type="tel" id="updatePhone" required></div><div class="form-group"><label>Email</label><input type="email" id="updateEmail"></div><div class="form-group"><label>Location</label><input type="text" id="updateLocation"></div><div class="form-group"><label>Status</label><select id="updateStatus"><option value="New">New</option><option value="Contacted">Contacted</option><option value="Interested">Interested</option><option value="Follow-up">Follow-up</option><option value="Converted">Converted</option><option value="Not Interested">Not Interested</option></select></div><div class="form-group"><label>Priority</label><select id="updatePriority"><option value="Low">Low</option><option value="Medium">Medium</option><option value="High">High</option></select></div><div class="form-group"><label>Next Follow-up Date</label><input type="date" id="updateFollowUp"></div></div><div style="margin-top: 2rem;"><h3 style="color: var(--gold-primary); margin-bottom: 1rem;"><i class="fas fa-history"></i> Recent History</h3><div id="customerUpdateHistory" style="max-height: 300px; overflow-y: auto;"></div></div><div style="text-align: center; margin-top: 2rem; display:flex; gap: 1rem; justify-content:center;"><button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Update Customer</button><button type="button" class="btn btn-secondary" onclick="crmApp.closeModal()">Cancel</button></div></form></div></div>
-    </div>
-
-    <div id="orderPortal" class="app-portal">
-        <div class="container">
-            <header class="header">
-                <div class="header-text"><h1>Order Management</h1><p>Track Custom Orders & Production</p></div>
-                <div class="logo-container"><img src="logo.jpeg" alt="Logo" class="logo"></div>
-                <button class="btn btn-secondary" onclick="showPortalSelection()"><i class="fas fa-home"></i> Main Menu</button>
-            </header>
-            <div class="nav-tabs">
-                <button class="tab-button active" onclick="orderApp.showTab('new-order', this)"><i class="fas fa-plus-circle"></i> New Order</button>
-                <button class="tab-button" onclick="orderApp.showTab('order-tracking', this)"><i class="fas fa-tasks"></i> Order Tracking</button>
-                <button class="tab-button" onclick="orderApp.showTab('dashboard', this)"><i class="fas fa-chart-pie"></i> Dashboard</button>
-            </div>
-            <div id="order-new-order" class="tab-content active"><h2 class="section-title">Enter New Order Details</h2><div class="premium-card"><form id="newOrderForm"><div class="form-grid"><div class="form-group"><label for="orderNumber">Order Number</label><input type="number" id="orderNumber" required></div><div class="form-group"><label for="orderCustomerName">Customer Name</label><input type="text" id="orderCustomerName" required></div><div class="form-group"><label for="orderPhoneNumber">Phone Number</label><input type="tel" id="orderPhoneNumber" required></div><div class="form-group"><label for="city">City</label><input type="text" id="city"></div><div class="form-group"><label for="itemName">Item Name</label><input type="text" id="itemName" required></div><div class="form-group"><label for="weight">Approx. Weight (grams)</label><input type="text" id="weight"></div><div class="form-group"><label for="dueDate">Due Date</label><input type="date" id="dueDate"></div><div class="form-group"><label for="workerName">Assigned Worker</label><input type="text" id="workerName" list="workerDatalist" placeholder="Type worker name..."><datalist id="workerDatalist"></datalist></div><div class="form-group"><label for="assignedTo">Overseen By</label><select id="assignedTo" required><option value="Staff">Staff</option><option value="Vasu Garu">Vasu Garu</option></select></div></div><div class="form-group" style="margin-top:1.5rem;"><label for="specifications">Specifications / Notes</label><textarea id="specifications" rows="3"></textarea></div><div class="form-group" style="margin-top:1.5rem;"><label for="modifications">Modifications</label><textarea id="modifications" rows="3"></textarea></div><div class="form-group" style="margin-top:1.5rem;"><label for="itemPicture">Item Picture</label>
-            <input type="file" id="itemPicture" accept="image/jpeg, image/png, image/gif, image/webp"></div><div style="text-align: center; margin-top: 2rem;"><button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save Order</button></div></form></div></div>
-            <div id="order-order-tracking" class="tab-content"><h2 class="section-title">Track All Orders</h2><div class="premium-card"><div class="filter-grid"><div class="form-group"><label>Search by Order #, Name, Phone</label><input type="text" id="orderSearchInput" oninput="orderApp.renderOrders()"></div><div class="form-group"><label>Special Filters</label><select id="specialFilter" onchange="orderApp.renderOrders()"><option value="all">All Active Orders</option><option value="overdue">Overdue Orders</option><option value="unassigned">Unassigned Orders</option><option value="completedNotDelivered">Ready for Delivery</option></select></div><div class="toggle-switch-container"><span>Staff</span><label class="switch"><input type="checkbox" id="ownerToggle" onchange="orderApp.renderOrders()"><span class="slider"></span></label><span>Vasu Garu</span></div></div></div><div class="table-container"><table class="premium-table"><thead id="orderTableHeader"></thead><tbody id="orderTableBody"></tbody></table></div></div>
-            <div id="order-dashboard" class="tab-content"><h2 class="section-title">Business Dashboard</h2><div class="analytics-dashboard" id="orderAnalyticsDashboard"><div class="analytics-card"><h3 id="totalOrders">0</h3><p>Total Orders Ever</p></div><div class="analytics-card"><h3 id="pendingOrders">0</h3><p>Pending</p></div><div class="analytics-card"><h3 id="inProgressOrders">0</h3><p>In Progress</p></div><div class="analytics-card"><h3 id="overdueCount">0</h3><p>Overdue</p></div><div class="analytics-card"><h3 id="deliveredCount">0</h3><p>Delivered</p></div></div><div class="premium-card"><h3 class="section-title" style="font-size: 1.8rem;">Orders by Worker</h3><div class="chart-container"><canvas id="workerChart"></canvas></div></div></div>
-        </div>
-        <div id="orderUpdateModal" class="modal-premium"><div class="modal-content"><h2 class="section-title" style="margin-bottom: 1.5rem;">Update Order</h2><form id="updateOrderForm"><input type="hidden" id="updateOrderId"><div class="form-grid"><div class="form-group"><label for="updateWorkerName">Assigned Worker</label><input type="text" id="updateWorkerName" list="workerDatalist" placeholder="Type worker name..."></div><div class="form-group"><label for="updateOrderStatus">Order Status</label><select id="updateOrderStatus"><option value="Pending">Pending</option><option value="In-Progress">In-Progress</option><option value="Completed">Completed (Ready)</option><option value="Delivered">Delivered</option></select></div></div><div style="text-align: center; margin-top: 2rem;"><button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save Changes</button></div></form><div class="notes-section"><h3 style="color: var(--gold-primary); margin-bottom: 1.5rem; text-align: center;">Customer Communication Log</h3><div id="customerNotesHistory"></div><div class="form-group"><label for="newCustomerNote">Add New Description</label><textarea id="newCustomerNote" rows="3" placeholder="What to say to the customer..."></textarea></div><div style="text-align: center; margin-top: 1rem;"><button type="button" id="addNoteBtn" class="btn btn-secondary"><i class="fas fa-plus"></i> Add Note</button></div></div></div></div>
-        <div id="imageModal" class="modal-premium"><div class="modal-content"><img id="fullSizeImage" src="" alt="Full Size Order Image"></div></div>
-    </div>
-    
-    <script>
         // === GLOBAL UTILITIES (Shared by both apps) ===
         function showNotification(message, isSuccess = true) {
             const notification = document.createElement('div');
@@ -1497,6 +693,897 @@
                 let filteredOrders = this.orders.filter(o => {
                     const matchesSearch = !searchTerm || o.orderNumber.toString().includes(searchTerm) || o.customerName.toLowerCase().includes(searchTerm) || o.phoneNumber.includes(searchTerm);
                     const matchesAssignment = showVasuGaru ? o.assignedTo === 'Vasu Garu' : o.assignedTo === 'Staff';
+                    
+                    let matchesSpecial = false;
+                    if (specialFilter === 'all') { matchesSpecial = o.status !== 'Delivered';
+                    } else if (specialFilter === 'overdue') { matchesSpecial = o.dueDate && new Date(o.dueDate) < today && o.status !== 'Delivered';
+                    } else if (specialFilter === 'unassigned') { matchesSpecial = !o.workerName;
+                    } else if (specialFilter === 'completedNotDelivered') { matchesSpecial = o.status === 'Completed';}
+                    return matchesSearch && matchesAssignment && matchesSpecial;
+                });
+
+                if (filteredOrders.length === 0) {
+                    tableBody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding: 2rem;">No orders match filters.</td></tr>`; return;
+                }
+
+                tableBody.innerHTML = filteredOrders.map(order => {
+                    const isOverdue = order.dueDate && new Date(order.dueDate) < today && order.status !== 'Delivered';
+                    const dueDateHtml = order.dueDate ? `${new Date(order.dueDate).toLocaleDateString('en-IN')} ${isOverdue ? '<i class="fas fa-exclamation-triangle" style="color: var(--danger-red);"></i>' : ''}` : 'N/A';
+                    const imageHtml = order.itemPictureUrl ? `<img src="${order.itemPictureUrl}" class="order-image-thumbnail" onclick="orderApp.openImageModal('${order.id}')">` : `<span>No Image</span>`;
+                    return `
+                    <tr>
+                        <td data-label="Image">${imageHtml}</td>
+                        <td data-label="Order #">${order.orderNumber}</td>
+                        <td data-label="Customer"><strong>${order.customerName}</strong><br><small>${order.city || 'N/A'}</small></td>
+                        <td data-label="Contact" class="contact-links">
+                            <a href="tel:${order.phoneNumber}" class="phone-link"><i class="fas fa-phone"></i> Call</a>
+                            <a href="https://wa.me/${formatPhoneForWhatsApp(order.phoneNumber)}" class="whatsapp-link" target="_blank"><i class="fab fa-whatsapp"></i> WhatsApp</a>
+                        </td>
+                        <td data-label="Item">${order.itemName} (${order.weight}g)</td>
+                        <td data-label="Worker">${order.workerName || '<em>Unassigned</em>'}</td>
+                        <td data-label="Due Date">${dueDateHtml}</td>
+                        <td data-label="Status"><span class="status-badge status-${order.status.replace('-','')}">${order.status}</span></td>
+                        <td data-label="Actions">
+                            <button class="btn btn-primary" style="padding: 5px 10px;" onclick="orderApp.openUpdateModal('${order.id}')"><i class="fas fa-edit"></i></button>
+                        </td>
+                    </tr>`}).join('');
+            },
+            
+            async handleUpdateOrder(e) {
+                e.preventDefault();
+                const button = e.target.querySelector('button[type="submit"]');
+                toggleButtonLoading(button, true, button.innerHTML);
+                const orderId = document.getElementById('updateOrderId').value;
+                const updates = {
+                    status: document.getElementById('updateOrderStatus').value,
+                    workerName: document.getElementById('updateWorkerName').value.trim()
+                };
+                
+                if (await this.handleApiRequest('update-order', { id: orderId, updates: updates }, 'Order updated!')) {
+                    await this.loadAllDataFromServer();
+                }
+                toggleButtonLoading(button, false, '<i class="fas fa-save"></i> Save Changes');
+            },
+
+            async handleAddCustomerNote() {
+                const orderId = document.getElementById('updateOrderId').value;
+                const noteText = document.getElementById('newCustomerNote').value.trim();
+                if (!noteText) { showNotification("Note cannot be empty.", false); return; }
+                const newNote = { text: noteText, timestamp: new Date().toISOString() };
+                
+                if (await this.handleApiRequest('add-order-note', { id: orderId, note: newNote }, 'Note added!')) {
+                    document.getElementById('newCustomerNote').value = '';
+                    await this.loadAllDataFromServer();
+                    const order = this.orders.find(o => o.id === orderId);
+                    this.renderNotesHistory(order ? order.customerNotes : []);
+                }
+            },
+
+            updateDashboard() {
+                const today = new Date(); today.setHours(0, 0, 0, 0);
+                const deliveredInLast24h = this.orders.filter(o => o.status === 'Delivered').length;
+                document.querySelector('#orderAnalyticsDashboard #totalOrders').textContent = this.orders.length + this.archivedOrders.length;
+                document.querySelector('#orderAnalyticsDashboard #pendingOrders').textContent = this.orders.filter(o => o.status === 'Pending').length;
+                document.querySelector('#orderAnalyticsDashboard #inProgressOrders').textContent = this.orders.filter(o => o.status === 'In-Progress').length;
+                document.querySelector('#orderAnalyticsDashboard #overdueCount').textContent = this.orders.filter(o => o.dueDate && new Date(o.dueDate) < today && o.status !== 'Delivered').length;
+                document.querySelector('#orderAnalyticsDashboard #deliveredCount').textContent = this.archivedOrders.length + deliveredInLast24h;
+            },
+
+            renderCharts() {
+                if (this.charts.worker) this.charts.worker.destroy();
+                const allKnownOrders = [...this.orders, ...this.archivedOrders];
+                const workerCounts = allKnownOrders.reduce((acc, order) => {
+                    const worker = order.workerName || 'Unassigned';
+                    acc[worker] = (acc[worker] || 0) + 1;
+                    return acc;
+                }, {});
+
+                this.charts.worker = new Chart(document.getElementById('workerChart').getContext('2d'), {
+                    type: 'bar',
+                    data: { labels: Object.keys(workerCounts), datasets: [{ label: 'Number of Orders', data: Object.values(workerCounts), backgroundColor: '#DCCA87', borderColor: '#F5EFE1', borderWidth: 1 }] },
+                    options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, ticks: { color: '#AAAAAA', stepSize: 1 } }, x: { ticks: { color: '#AAAAAA' } } }, plugins: { legend: { display: false } } }
+                });
+            },
+
+            openUpdateModal(orderId) {
+                const order = this.orders.find(o => o.id === orderId);
+                if (!order) return;
+                document.getElementById('updateOrderId').value = order.id;
+                document.getElementById('updateOrderStatus').value = order.status;
+                document.getElementById('updateWorkerName').value = order.workerName || '';
+                document.getElementById('newCustomerNote').value = '';
+                this.renderNotesHistory(order.customerNotes || []);
+                document.getElementById('orderUpdateModal').classList.add('show');
+            },
+
+            renderNotesHistory(notes) {
+                const historyContainer = document.getElementById('orderUpdateModal').querySelector('#customerNotesHistory');
+                if (!notes || notes.length === 0) {
+                    historyContainer.innerHTML = '<p style="text-align: center;">No notes yet.</p>'; return;
+                }
+                historyContainer.innerHTML = [...notes].reverse().map(note => {
+                    const formattedDate = new Date(note.timestamp).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' });
+                    return `<div class="note-item"><p>${note.text}</p><small>${formattedDate}</small></div>`;
+                }).join('');
+            },
+
+            openImageModal(orderId) {
+                const order = this.orders.find(o => o.id === orderId);
+                if (order && order.itemPictureUrl) {
+                    document.getElementById('fullSizeImage').src = order.itemPictureUrl;
+                    document.getElementById('imageModal').classList.add('show');
+                }
+            },
+            
+            closeModal(modalId) { 
+                const modal = document.getElementById(modalId)
+                if (modal) modal.classList.remove('show');
+            }
+        };
+    </script>
+</body>
+</html>
+ -->
+ <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Srikar Jewellers - Business Suite</title>
+    <link rel="icon" type="image/jpeg" href="logo.jpeg">
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-storage-compat.js"></script>
+
+    <style>
+        :root {--gold-primary: #DCCA87;--gold-secondary: #F5EFE1;--dark-bg: #0C0C0C;--dark-secondary: #181818;--text-primary: #FFFFFF;--text-secondary: #AAAAAA;--danger-red: #d9534f; --transition-fast: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); --status-pending: #f0ad4e; --status-progress: #5bc0de; --status-completed: #5cb85c; --status-delivered: #8a6de9;}
+        * {margin: 0;padding: 0;box-sizing: border-box;}
+        body {font-family: 'Poppins', sans-serif;background-color: var(--dark-bg);color: var(--text-secondary);min-height: 100vh; line-height: 1.6;}
+        
+        #portalSelectionScreen { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; text-align: center; padding: 2rem; background-color: var(--dark-bg); animation: fadeIn 0.8s ease-out; position: relative; z-index: 1; }
+        #portalSelectionScreen::before { content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-image: url('logo.jpeg'); background-position: center; background-repeat: no-repeat; background-size: 450px; opacity: 0.2; z-index: -1; }
+        .container { position: relative; z-index: 1; overflow: hidden; }
+        .container::before { content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 95%; height: 95%; background-image: url('logo.jpeg'); background-position: center; background-repeat: no-repeat; background-size: contain; opacity: 0.07; z-index: -1; pointer-events: none; }
+
+        .portal-header { margin-bottom: 3rem; }
+        .portal-header h1 { font-family: 'Cormorant Garamond', serif; font-size: 4rem; color: var(--gold-primary); }
+        .portal-header p { font-size: 1.2rem; color: var(--text-secondary); }
+        .portal-choices { display: flex; flex-wrap: wrap; justify-content: center; gap: 2rem; }
+        .portal-card { background: var(--dark-secondary); border: 1px solid rgba(220, 202, 135, 0.15); border-radius: 20px; padding: 3rem 2rem; width: 300px; cursor: pointer; transition: all 0.3s ease; background-color: rgba(24, 24, 24, 0.8); backdrop-filter: blur(5px); }
+        .portal-card:hover { transform: translateY(-10px); box-shadow: 0 10px 30px rgba(0,0,0,0.5); border-color: var(--gold-primary); }
+        .portal-card i { font-size: 3.5rem; color: var(--gold-primary); margin-bottom: 1.5rem; }
+        .portal-card h2 { font-family: 'Cormorant Garamond', serif; font-size: 2rem; color: var(--gold-secondary); margin-bottom: 0.5rem; }
+        .portal-card p { color: var(--text-secondary); }
+
+        .app-portal { display: none; }
+        .container {max-width: 1800px;margin: 1rem;background: var(--dark-secondary);border: 1px solid rgba(220, 202, 135, 0.15);border-radius: 20px;}
+        .header {padding: 2rem 1.5rem;background: #111111;border-bottom: 1px solid rgba(220, 202, 135, 0.15);display: flex;align-items: center;justify-content: space-between;flex-wrap: wrap; gap: 1rem;}
+        .header-text h1 {font-family: 'Cormorant Garamond', serif;font-size: 2.5rem;color: var(--gold-primary);}
+        
+        .logo-container .logo { width: 80px; height: 80px; border-radius: 50%; border: 4px solid var(--gold-primary); box-shadow: 0 0 30px rgba(220, 202, 135, 0.6); }
+        
+        .nav-tabs {background: var(--dark-secondary);padding: 0 1rem;display: flex;border-bottom: 1px solid rgba(220, 202, 135, 0.1);overflow-x: auto;}
+        .nav-tabs button {background: transparent;border: none;padding: 1.2rem 1rem;font-size: 1rem;cursor: pointer;color: var(--text-secondary);border-bottom: 3px solid transparent;transition: var(--transition-fast);white-space: nowrap;}
+        .nav-tabs button:hover, .nav-tabs button.active {color: var(--gold-primary);}
+        .nav-tabs button.active {border-bottom-color: var(--gold-primary);}
+        .nav-tabs button i {margin-right: 0.75rem;}
+        .tab-content {padding: 1.5rem; display: none;}
+        .tab-content.active {display: block; animation: fadeIn 0.6s ease-out;}
+        @keyframes fadeIn {from {opacity: 0;transform: translateY(15px);} to {opacity: 1;transform: translateY(0);}}
+        .section-title {font-family: 'Cormorant Garamond', serif;font-size: 2.2rem;color: var(--gold-primary);margin-bottom: 2rem;text-align: center;}
+        .premium-card {background: #111111;border: 1px solid rgba(220, 202, 135, 0.1);border-radius: 15px;padding: 1.5rem;margin-bottom: 2rem;}
+        .form-grid {display: grid;grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));gap: 1.5rem;}
+        .form-group {display: flex;flex-direction: column;}
+        .form-group label {margin-bottom: 0.75rem;font-weight: 500;color: var(--gold-secondary);font-size: 0.9rem;text-transform: uppercase;}
+        .form-group input, .form-group select, .form-group textarea {width: 100%;padding: 0.8rem 1rem;border: 1px solid rgba(220, 202, 135, 0.2);border-radius: 8px;font-size: 1rem;background: var(--dark-secondary);color: var(--text-primary);transition: var(--transition-fast);}
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus {outline: none;border-color: var(--gold-primary);}
+        .btn {padding: 0.8rem 1.8rem;border: 1px solid var(--gold-primary);border-radius: 8px;cursor: pointer;font-size: 1rem;font-weight: 600;text-transform: uppercase;transition: var(--transition-fast); display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;}
+        .btn-secondary {background: transparent;color: var(--gold-primary);}
+        .btn-secondary:hover {background: rgba(220, 202, 135, 0.1);}
+        .btn-primary {background: var(--gold-primary);color: var(--dark-bg);}
+        .btn-primary:hover {background: #EADCA6;}
+        .btn-danger {background: var(--danger-red);color: white;border-color: var(--danger-red);}
+        .btn-danger:hover {background: #c9302c;}
+        .btn:disabled {background: #555;border-color: #555;color: #888;cursor: not-allowed;}
+        .premium-table {width: 100%;border-collapse: collapse;background: #111111;border-radius: 15px;overflow: hidden;}
+        .premium-table th, .premium-table td {padding: 1.2rem 1rem;text-align: left;vertical-align: middle; border-bottom: 1px solid rgba(220, 202, 135, 0.1);}
+        .premium-table th {background: var(--dark-secondary);color: var(--gold-primary);text-transform: uppercase;}
+        .premium-table tbody tr:hover {background: var(--dark-secondary);}
+        .order-image-thumbnail {width: 50px; height: 50px; border-radius: 5px; object-fit: cover; cursor: pointer; transition: transform 0.2s ease;}
+        .order-image-thumbnail:hover {transform: scale(1.1);}
+        .contact-links {display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;}
+        .contact-links a {padding: 0.3rem 0.6rem; border-radius: 5px; text-decoration: none; font-size: 0.8rem; display: inline-flex; align-items: center; gap: 0.3rem; transition: var(--transition-fast);}
+        .phone-link { background: rgba(92, 184, 230, 0.1); color: #5cb8e6; border: 1px solid rgba(92, 184, 230, 0.3); }
+        .phone-link:hover { background: rgba(92, 184, 230, 0.2); }
+        .whatsapp-link { background: rgba(37, 211, 102, 0.1); color: #25D366; border: 1px solid rgba(37, 211, 102, 0.3); }
+        .whatsapp-link:hover { background: rgba(37, 211, 102, 0.2); }
+        .status-badge { padding: 0.3rem 0.7rem; border-radius: 20px; color: white; font-size: 0.8rem; font-weight: 500; text-transform: uppercase; }
+        .status-Pending { background-color: var(--status-pending); }
+        .status-In-Progress { background-color: var(--status-progress); }
+        .status-Completed { background-color: var(--status-completed); }
+        .status-Delivered { background-color: var(--status-delivered); }
+        .toggle-switch-container { display: flex; align-items: center; justify-content: flex-end; gap: 1rem; color: var(--gold-secondary); font-weight: 600; }
+        .switch { position: relative; display: inline-block; width: 60px; height: 34px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #333; transition: .4s; border-radius: 34px; }
+        .slider:before { position: absolute; content: ""; height: 26px; width: 26px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: var(--gold-primary); }
+        input:checked + .slider:before { transform: translateX(26px); }
+        .analytics-dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
+        .analytics-card { background: #1C1C1C; padding: 1.5rem; border-radius: 10px; text-align: center; border-left: 5px solid var(--gold-primary); }
+        .analytics-card h3 { font-size: 2.5rem; color: var(--gold-primary); }
+        .analytics-card p { font-size: 1rem; color: var(--text-secondary); margin-top: 0.5rem; }
+        .chart-container {height: 350px;padding: 1rem;background: #1C1C1C;border-radius: 10px;}
+        .premium-notification {position: fixed;bottom: 20px;left: 50%;transform: translateX(-50%);padding: 1rem 2rem;background: linear-gradient(145deg, #EADCA6 0%, #DCCA87 100%);color: var(--dark-bg);border-radius: 10px;z-index: 9999;font-weight: 600;animation: slideUp 0.5s ease forwards, slideDown 0.5s ease 4.5s forwards;}
+        @keyframes slideUp {from {transform: translate(-50%, 150%);} to {transform: translate(-50%, 0);}}
+        @keyframes slideDown {from {transform: translate(-50%, 0); opacity: 1;} to {transform: translate(-50%, 150%); opacity: 0;}}
+        .modal-premium {position: fixed;top: 0;left: 0;width: 100%;height: 100%;background: rgba(0, 0, 0, 0.7);backdrop-filter: blur(10px);z-index: 1000;display: none;align-items: center;justify-content: center;opacity: 0;transition: opacity 0.4s ease;}
+        .modal-premium.show {display: flex;opacity: 1;}
+        .modal-content {background: var(--dark-secondary);border: 1px solid rgba(220, 202, 135, 0.2);border-radius: 20px;padding: 2rem;width: 95%;max-width: 800px;max-height: 90vh;overflow-y: auto;}
+        #imageModal .modal-content {max-width: 90vw; max-height: 90vh; padding: 0.5rem; overflow: hidden;}
+        #fullSizeImage {max-width: 100%; max-height: calc(90vh - 1rem); display: block; margin: auto;}
+        .filter-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; align-items: flex-end; }
+        .notes-section { margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid rgba(220, 202, 135, 0.15); }
+        #customerNotesHistory { max-height: 200px; overflow-y: auto; padding-right: 10px; margin-bottom: 1.5rem; }
+        .note-item { background: #111; padding: 0.8rem; border-radius: 8px; margin-bottom: 0.8rem; border-left: 3px solid var(--gold-primary); }
+        .note-item p { margin: 0; color: var(--text-primary); }
+        .note-item small { color: var(--text-secondary); font-size: 0.8rem; }
+        .follow-up-actions { margin-top: 0.5rem; display: flex; gap: 0.5rem; }
+        @media (max-width: 768px) {
+            .portal-header h1 { font-size: 2.5rem; }
+            .container { margin: 0; border-radius: 0; }
+            .premium-table thead { display: none; }
+            .premium-table, .premium-table tbody, .premium-table tr, .premium-table td { display: block; width: 100%; }
+            .premium-table tr { margin-bottom: 1rem; border: 1px solid rgba(220, 202, 135, 0.15); border-radius: 10px; padding: 1rem; }
+            .premium-table td { padding: 0.75rem 0.5rem; padding-left: 50%; text-align: right; position: relative; border-bottom: 1px solid #222; display: flex; align-items: center; justify-content: flex-end; }
+            .premium-table td:last-child { border-bottom: none; }
+            .premium-table td::before { content: attr(data-label); position: absolute; left: 0.5rem; width: 45%; padding-right: 10px; white-space: nowrap; text-align: left; font-weight: bold; color: var(--gold-secondary); }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="portalSelectionScreen">
+        <div class="portal-header">
+            <h1>Srikar Jewellers</h1>
+            <p>Business Suite</p>
+        </div>
+        <div class="portal-choices">
+            <div class="portal-card" onclick="showPortal('crm')">
+                <i class="fas fa-users"></i>
+                <h2>Insta CRM</h2>
+                <p>Manage Customer Leads & Follow-ups</p>
+            </div>
+            <div class="portal-card" onclick="showPortal('order')">
+                <i class="fas fa-gem"></i>
+                <h2>Order Management</h2>
+                <p>Track Custom Orders & Production</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="crmPortal" class="app-portal">
+        <div class="container">
+            <header class="header">
+                <div class="header-text"><h1>Insta CRM</h1><p>Professional CRM | Bhimavaram</p></div>
+                 <div class="logo-container"><img src="logo.jpeg" alt="Logo" class="logo"></div>
+                <button class="btn btn-secondary" onclick="showPortalSelection()"><i class="fas fa-home"></i> Main Menu</button>
+            </header>
+            <div class="nav-tabs">
+                <button class="tab-button active" onclick="crmApp.showTab('add-customer', this)"><i class="fas fa-plus-circle"></i> Add Customer</button>
+                <button class="tab-button" onclick="crmApp.showTab('daily-updates', this)"><i class="fas fa-comments"></i> Daily Updates</button>
+                <button class="tab-button" onclick="crmApp.showTab('follow-ups', this)"><i class="fas fa-calendar-check"></i> Follow-ups</button>
+                <button class="tab-button" onclick="crmApp.showTab('customer-list', this)"><i class="fas fa-users"></i> Database</button>
+                <button class="tab-button" onclick="crmApp.showTab('history', this)"><i class="fas fa-history"></i> Customer History</button>
+                <button class="tab-button" onclick="crmApp.showTab('analytics', this)"><i class="fas fa-chart-pie"></i> Analytics</button>
+            </div>
+            <div id="add-customer" class="tab-content active"><h2 class="section-title">Record New Lead</h2><div class="premium-card"><form id="customerForm"><div class="form-grid"><div class="form-group"><label for="customerName">Customer Name</label><input type="text" id="customerName"></div><div class="form-group"><label for="phoneNumber">Phone Number *</label><input type="tel" id="phoneNumber" required></div><div class="form-group"><label for="email">Email Address</label><input type="email" id="email"></div><div class="form-group"><label for="location">Location</label><input type="text" id="location"></div><div class="form-group"><label for="adSource">Lead Source</label><select id="adSource"><option value="">Select Source</option><option value="Instagram">Instagram</option><option value="Facebook">Facebook</option><option value="Referral">Referral</option><option value="Walk-in">Walk-in</option><option value="Other">Other</option></select></div><div class="form-group"><label for="interestedProduct">Product of Interest</label><input type="text" id="interestedProduct" list="productList"><datalist id="productList"></datalist></div><div class="form-group"><label for="budget">Estimated Budget</label><select id="budget"><option value="">Select Budget</option><option value="<50k">Under ₹50,000</option><option value="50k-1L">₹50k - ₹1 Lakh</option><option value="1L-3L">₹1 Lakh - ₹3 Lakh</option><option value=">5L">Above ₹5 Lakh</option></select></div><div class="form-group"><label for="leadStatus">Initial Status</label><select id="leadStatus"><option value="New">New</option><option value="Contacted">Contacted</option><option value="Interested">Interested</option><option value="Follow-up">Follow-up</option><option value="Not Interested">Not Interested</option></select></div><div class="form-group"><label for="priority">Priority</label><select id="priority"><option value="Medium">Medium</option><option value="High">High</option><option value="Low">Low</option></select></div><div class="form-group"><label for="nextFollowUp">Next Follow-up</label><input type="date" id="nextFollowUp"></div></div><div class="form-group" style="margin-top:1.5rem;"><label for="initialResponse">Notes</label><textarea id="initialResponse" rows="3"></textarea></div><div style="text-align: center; margin-top: 2rem;"><button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save Customer</button></div></form></div></div>
+            <div id="daily-updates" class="tab-content"><h2 class="section-title">Daily Customer Updates</h2><div class="premium-card"><h3 style="color: var(--gold-primary); margin-bottom: 1.5rem;"><i class="fas fa-plus-circle"></i> Add Daily Update</h3><form id="dailyUpdateForm"><div class="form-grid"><div class="form-group"><label>Select Customer</label>
+            <input type="text" id="updateCustomerIdInput" list="updateCustomerDatalist" placeholder="Search or select a customer..." required><datalist id="updateCustomerDatalist"></datalist></div><div class="form-group"><label>Support Person</label><input type="text" id="supportPerson" required></div><div class="form-group"><label>Interaction Type</label><select id="callStatus"><option value="Phone Call">Phone Call</option><option value="WhatsApp">WhatsApp</option><option value="Store Visit">Store Visit</option><option value="Email">Email</option></select></div></div><div class="form-group" style="margin-top: 1rem;"><label>Daily Comment/Update *</label><textarea id="dailyComment" rows="4" required></textarea></div><div style="text-align: center; margin-top: 1.5rem;"><button type="submit" class="btn btn-primary"><i class="fas fa-comment-medical"></i> Add Update</button></div></form></div><div class="premium-card"><h3 style="color: var(--gold-primary); margin-bottom: 1.5rem;"><i class="fas fa-history"></i> Recent Updates</h3><div id="dailyUpdatesList"></div></div></div>
+            <div id="follow-ups" class="tab-content"><h2 class="section-title">Follow-up Schedule</h2><div class="form-grid"><div class="premium-card"><h3><i class="fas fa-fire" style="color:#d9534f;"></i> Overdue</h3><div id="overdueFollowUps"></div></div><div class="premium-card"><h3><i class="fas fa-star" style="color:#f0ad4e;"></i> Today</h3><div id="todayFollowUps"></div></div><div class="premium-card"><h3><i class="fas fa-calendar-day" style="color:#5bc0de;"></i> Upcoming</h3><div id="upcomingFollowUps"></div></div></div></div>
+            <div id="customer-list" class="tab-content"><h2 class="section-title">Customer Database</h2><div class="premium-card"><div class="form-grid"><div class="form-group"><label>Search by Name/Phone</label><input type="text" id="searchInput" oninput="crmApp.renderAll()"></div><div class="form-group"><label>Filter by Status</label><select id="statusFilter" onchange="crmApp.renderAll()"><option value="">All Statuses</option><option value="New">New</option><option value="Contacted">Contacted</option><option value="Interested">Interested</option><option value="Follow-up">Follow-up</option><option value="Converted">Converted</option><option value="Not Interested">Not Interested</option></select></div><div class="form-group"><label>Filter by Product</label><input type="text" id="productFilter" list="productList" oninput="crmApp.renderAll()" placeholder="Type or select product..."></div></div></div><div class="table-container"><table class="premium-table"><thead id="customerTableHeader"></thead><tbody id="customerTableBody"></tbody></table></div></div>
+            <div id="history" class="tab-content"><h2 class="section-title">Full Customer History</h2><div class="premium-card"><div class="form-group"><label>Search Customer by Name or Phone</label><input type="text" id="historySearchInput" list="historyCustomerList" placeholder="Start typing..."><datalist id="historyCustomerList"></datalist></div><div style="text-align:center; margin-top:1rem;"><button class="btn btn-secondary" onclick="crmApp.searchAndDisplayHistory()">Search</button></div></div><div id="customerHistoryLog" class="premium-card" style="display:none;"></div></div>
+            <div id="analytics" class="tab-content"><h2 class="section-title">Business Analytics</h2><div class="analytics-dashboard" id="crmAnalyticsDashboard"><div class="analytics-card"><h3 id="totalLeads">0</h3><p>Total Leads</p></div><div class="analytics-card"><h3 id="conversionRate">0%</h3><p>Conversion Rate</p></div><div class="analytics-card"><h3 id="todayUpdates">0</h3><p>Today's Updates</p></div><div class="analytics-card"><h3 id="followUpPending">0</h3><p>Pending Follow-ups</p></div></div><div class="premium-card"><h3 class="section-title" style="font-size: 1.8rem; margin-bottom: 1.5rem;">Customer Count by Lead Source</h3><div id="sourceCountDashboard" class="form-grid"></div></div><div class="form-grid"><div class="premium-card"><h3 class="section-title" style="font-size: 1.5rem;">Lead Sources</h3><div class="chart-container"><canvas id="sourceChart"></canvas></div></div><div class="premium-card"><h3 class="section-title" style="font-size: 1.5rem;">Lead Status</h3><div class="chart-container"><canvas id="statusChart"></canvas></div></div></div></div>
+        </div>
+        <div id="crmUpdateModal" class="modal-premium"><div class="modal-content"><h2 class="section-title" style="margin-bottom: 1.5rem;">Update Customer & View History</h2><form id="updateForm"><input type="hidden" id="updateCustomerIdModal"><div class="form-grid"><div class="form-group"><label>Customer Name</label><input type="text" id="updateName" required></div><div class="form-group"><label>Phone Number</label><input type="tel" id="updatePhone" required></div><div class="form-group"><label>Email</label><input type="email" id="updateEmail"></div><div class="form-group"><label>Location</label><input type="text" id="updateLocation"></div><div class="form-group"><label>Status</label><select id="updateStatus"><option value="New">New</option><option value="Contacted">Contacted</option><option value="Interested">Interested</option><option value="Follow-up">Follow-up</option><option value="Converted">Converted</option><option value="Not Interested">Not Interested</option></select></div><div class="form-group"><label>Priority</label><select id="updatePriority"><option value="Low">Low</option><option value="Medium">Medium</option><option value="High">High</option></select></div><div class="form-group"><label>Next Follow-up Date</label><input type="date" id="updateFollowUp"></div></div><div style="margin-top: 2rem;"><h3 style="color: var(--gold-primary); margin-bottom: 1rem;"><i class="fas fa-history"></i> Recent History</h3><div id="customerUpdateHistory" style="max-height: 300px; overflow-y: auto;"></div></div><div style="text-align: center; margin-top: 2rem; display:flex; gap: 1rem; justify-content:center;"><button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Update Customer</button><button type="button" class="btn btn-secondary" onclick="crmApp.closeModal()">Cancel</button></div></form></div></div>
+    </div>
+
+    <div id="orderPortal" class="app-portal">
+        <div class="container">
+            <header class="header">
+                <div class="header-text"><h1>Order Management</h1><p>Track Custom Orders & Production</p></div>
+                <div class="logo-container"><img src="logo.jpeg" alt="Logo" class="logo"></div>
+                <button class="btn btn-secondary" onclick="showPortalSelection()"><i class="fas fa-home"></i> Main Menu</button>
+            </header>
+            <div class="nav-tabs">
+                <button class="tab-button active" onclick="orderApp.showTab('new-order', this)"><i class="fas fa-plus-circle"></i> New Order</button>
+                <button class="tab-button" onclick="orderApp.showTab('order-tracking', this)"><i class="fas fa-tasks"></i> Order Tracking</button>
+                <button class="tab-button" onclick="orderApp.showTab('dashboard', this)"><i class="fas fa-chart-pie"></i> Dashboard</button>
+            </div>
+            <div id="order-new-order" class="tab-content active"><h2 class="section-title">Enter New Order Details</h2><div class="premium-card"><form id="newOrderForm"><div class="form-grid"><div class="form-group"><label for="orderNumber">Order Number</label><input type="number" id="orderNumber" required></div><div class="form-group"><label for="orderCustomerName">Customer Name</label><input type="text" id="orderCustomerName" required></div><div class="form-group"><label for="orderPhoneNumber">Phone Number</label><input type="tel" id="orderPhoneNumber" required></div><div class="form-group"><label for="city">City</label><input type="text" id="city"></div><div class="form-group"><label for="itemName">Item Name</label><input type="text" id="itemName" required></div><div class="form-group"><label for="weight">Approx. Weight (grams)</label><input type="text" id="weight"></div><div class="form-group"><label for="dueDate">Due Date</label><input type="date" id="dueDate"></div><div class="form-group"><label for="workerName">Assigned Worker</label><input type="text" id="workerName" list="workerDatalist" placeholder="Type worker name..."><datalist id="workerDatalist"></datalist></div>
+            <div class="form-group"><label for="assignedTo">Overseen By</label><input type="text" id="assignedTo" list="overseenByList" required><datalist id="overseenByList"></datalist></div></div><div class="form-group" style="margin-top:1.5rem;"><label for="specifications">Specifications / Notes</label><textarea id="specifications" rows="3"></textarea></div><div class="form-group" style="margin-top:1.5rem;"><label for="modifications">Modifications</label><textarea id="modifications" rows="3"></textarea></div><div class="form-group" style="margin-top:1.5rem;"><label for="itemPicture">Item Picture</label>
+            <input type="file" id="itemPicture" accept="image/jpeg, image/png, image/gif, image/webp"></div><div style="text-align: center; margin-top: 2rem;"><button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save Order</button></div></form></div></div>
+            <div id="order-order-tracking" class="tab-content"><h2 class="section-title">Track All Orders</h2><div class="premium-card"><div class="filter-grid"><div class="form-group"><label>Search by Order #, Name, Phone</label><input type="text" id="orderSearchInput" oninput="orderApp.renderOrders()"></div><div class="form-group"><label>Special Filters</label><select id="specialFilter" onchange="orderApp.renderOrders()"><option value="all">All Active Orders</option><option value="overdue">Overdue Orders</option><option value="unassigned">Unassigned Orders</option><option value="completedNotDelivered">Ready for Delivery</option></select></div><div class="toggle-switch-container"><span>Staff</span><label class="switch"><input type="checkbox" id="ownerToggle" onchange="orderApp.renderOrders()"><span class="slider"></span></label><span>Vasu Garu</span></div></div>
+            <div style="text-align: center; margin-top: 1.5rem;"><button class="btn btn-primary" onclick="orderApp.showTab('new-order', document.querySelector('#orderPortal .nav-tabs button:first-child'))"><i class="fas fa-plus"></i> Add New Order</button></div></div><div class="table-container"><table class="premium-table"><thead id="orderTableHeader"></thead><tbody id="orderTableBody"></tbody></table></div></div>
+            <div id="order-dashboard" class="tab-content"><h2 class="section-title">Business Dashboard</h2><div class="analytics-dashboard" id="orderAnalyticsDashboard"><div class="analytics-card"><h3 id="totalOrders">0</h3><p>Total Orders Ever</p></div><div class="analytics-card"><h3 id="pendingOrders">0</h3><p>Pending</p></div><div class="analytics-card"><h3 id="inProgressOrders">0</h3><p>In Progress</p></div><div class="analytics-card"><h3 id="overdueCount">0</h3><p>Overdue</p></div><div class="analytics-card"><h3 id="deliveredCount">0</h3><p>Delivered</p></div></div><div class="premium-card"><h3 class="section-title" style="font-size: 1.8rem;">Orders by Worker</h3><div class="chart-container"><canvas id="workerChart"></canvas></div></div></div>
+        </div>
+        <div id="orderUpdateModal" class="modal-premium"><div class="modal-content"><h2 class="section-title" style="margin-bottom: 1.5rem;">Update Order</h2><form id="updateOrderForm"><input type="hidden" id="updateOrderId"><div class="form-grid"><div class="form-group"><label for="updateWorkerName">Assigned Worker</label><input type="text" id="updateWorkerName" list="workerDatalist" placeholder="Type worker name..."></div><div class="form-group"><label for="updateOrderStatus">Order Status</label><select id="updateOrderStatus"><option value="Pending">Pending</option><option value="In-Progress">In-Progress</option><option value="Completed">Completed (Ready)</option><option value="Delivered">Delivered</option></select></div></div><div style="text-align: center; margin-top: 2rem;"><button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save Changes</button></div></form><div class="notes-section"><h3 style="color: var(--gold-primary); margin-bottom: 1.5rem; text-align: center;">Customer Communication Log</h3><div id="customerNotesHistory"></div><div class="form-group"><label for="newCustomerNote">Add New Description</label><textarea id="newCustomerNote" rows="3" placeholder="What to say to the customer..."></textarea></div><div style="text-align: center; margin-top: 1rem;"><button type="button" id="addNoteBtn" class="btn btn-secondary"><i class="fas fa-plus"></i> Add Note</button></div></div></div></div>
+        <div id="imageModal" class="modal-premium"><div class="modal-content"><img id="fullSizeImage" src="" alt="Full Size Order Image"></div></div>
+    </div>
+    
+    <script>
+        // Initialize Firebase
+        const firebaseConfig = {
+            apiKey: "YOUR_VITE_FIREBASE_API_KEY",
+            authDomain: "YOUR_VITE_FIREBASE_AUTH_DOMAIN",
+            projectId: "YOUR_VITE_FIREBASE_PROJECT_ID",
+            storageBucket: "YOUR_VITE_FIREBASE_STORAGE_BUCKET",
+            messagingSenderId: "YOUR_VITE_FIREBASE_MESSAGING_SENDER_ID",
+            appId: "YOUR_VITE_FIREBASE_APP_ID"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const storage = firebase.storage();
+
+        // === GLOBAL UTILITIES (Shared by both apps) ===
+        function showNotification(message, isSuccess = true) {
+            const notification = document.createElement('div');
+            notification.className = 'premium-notification';
+            notification.innerHTML = `<i class="fas fa-${isSuccess ? 'check-circle' : 'times-circle'}"></i> ${message}`;
+            document.body.appendChild(notification);
+            setTimeout(() => { if (notification.parentNode) notification.parentNode.removeChild(notification); }, 5000);
+        }
+
+        function toggleButtonLoading(button, isLoading, defaultButtonText = '') {
+            if(button){ 
+                button.disabled = isLoading; 
+                if(isLoading) { 
+                    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; 
+                } else if (defaultButtonText) { 
+                    button.innerHTML = defaultButtonText; 
+                }
+            }
+        }
+
+        function formatPhoneForWhatsApp(phone) { 
+            let cleaned = (phone || '').replace(/\D/g, ''); 
+            if (cleaned.length === 10) { cleaned = '91' + cleaned; } 
+            return cleaned; 
+        }
+
+        // === PORTAL NAVIGATION ===
+        const portalSelectionScreen = document.getElementById('portalSelectionScreen');
+        const crmPortal = document.getElementById('crmPortal');
+        const orderPortal = document.getElementById('orderPortal');
+        let isCrmInitialized = false;
+        let isOrderInitialized = false;
+
+        function showPortal(portalName) {
+            portalSelectionScreen.style.display = 'none';
+            crmPortal.style.display = 'none';
+            orderPortal.style.display = 'none';
+
+            if (portalName === 'crm') {
+                crmPortal.style.display = 'block';
+                if (!isCrmInitialized) {
+                    crmApp.init();
+                    isCrmInitialized = true;
+                }
+            } else if (portalName === 'order') {
+                orderPortal.style.display = 'block';
+                if (!isOrderInitialized) {
+                    orderApp.init();
+                    isOrderInitialized = true;
+                }
+            }
+        }
+
+        function showPortalSelection() {
+            crmPortal.style.display = 'none';
+            orderPortal.style.display = 'none';
+            portalSelectionScreen.style.display = 'flex';
+        }
+
+        // ===================================================================================
+        // ================================ INSTA CRM APP ====================================
+        // ===================================================================================
+        const crmApp = {
+            customers: [],
+            dailyUpdates: [],
+            charts: {},
+            modal: null,
+
+            init() {
+                this.modal = document.getElementById('crmUpdateModal');
+                this.showTab('add-customer', document.querySelector('#crmPortal .tab-button'));
+                this.loadAllDataFromServer();
+                this.setupEventListeners();
+            },
+            
+            async handleApiRequest(endpoint, body, successMessage) {
+                try {
+                    const response = await fetch(`/.netlify/functions/${endpoint}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(body)
+                    });
+                    if (!response.ok) {
+                        const err = await response.json();
+                        throw new Error(err.message || 'Server request failed');
+                    }
+                    showNotification(successMessage, true);
+                    return true;
+                } catch (error) {
+                    showNotification(`Error: ${error.message}`, false);
+                    return false;
+                }
+            },
+
+            async loadAllDataFromServer() {
+                try {
+                    const response = await fetch('/.netlify/functions/get-all-data'); 
+                    if (!response.ok) throw new Error('Server error!');
+                    const data = await response.json();
+                    
+                    this.customers = (data.customers || []).map(c => ({...c, id: c.id}));
+                    this.dailyUpdates = (data.dailyUpdates || []).map(u => ({...u, id: u.id}));
+                    
+                    this.customers.sort((a, b) => new Date(b.dateAdded) - new Date(a.dateAdded));
+                    this.dailyUpdates.sort((a, b) => new Date(b.date) - new Date(a.date));
+                    this.renderAll();
+                } catch (error) { showNotification("Could not load CRM data from the cloud.", false); }
+            },
+
+            setupEventListeners() {
+                document.getElementById('customerForm').addEventListener('submit', (e) => this.handleAddCustomer(e));
+                document.getElementById('dailyUpdateForm').addEventListener('submit', (e) => this.handleAddDailyUpdate(e));
+                document.getElementById('updateForm').addEventListener('submit', (e) => this.handleUpdateCustomer(e));
+                document.getElementById('historySearchInput').addEventListener('input', (e) => this.handleHistorySearchInput(e));
+                this.modal.addEventListener('click', (e) => { if (e.target === this.modal) this.closeModal(); });
+            },
+            
+            async handleAddCustomer(e) {
+                e.preventDefault();
+                const form = e.target;
+                const button = form.querySelector('button[type="submit"]');
+                toggleButtonLoading(button, true, button.innerHTML);
+                const newCustomer = {
+                    dateAdded: new Date().toISOString(),
+                    name: form.elements.customerName.value.trim(), phone: form.elements.phoneNumber.value.trim(), email: form.elements.email.value.trim(), location: form.elements.location.value.trim(), adSource: form.elements.adSource.value, interestedProduct: form.elements.interestedProduct.value.trim(), budget: form.elements.budget.value, leadStatus: form.elements.leadStatus.value, priority: form.elements.priority.value, nextFollowUp: form.elements.nextFollowUp.value,
+                    notes: [{ date: new Date().toISOString(), text: form.elements.initialResponse.value.trim() }]
+                };
+                if (await this.handleApiRequest('add-customer', newCustomer, 'Customer saved!')) {
+                    form.reset();
+                    await this.loadAllDataFromServer();
+                }
+                toggleButtonLoading(button, false, '<i class="fas fa-save"></i> Save Customer');
+            },
+
+            async handleAddDailyUpdate(e) {
+                e.preventDefault();
+                const form = e.target;
+                const button = form.querySelector('button[type="submit"]');
+                toggleButtonLoading(button, true, button.innerHTML);
+                
+                // UPDATED: Find customer ID from datalist value
+                const inputValue = form.elements.updateCustomerIdInput.value;
+                const customer = this.customers.find(c => `${c.name} - ${c.phone}` === inputValue);
+                
+                if (!customer) {
+                    showNotification("Please select a valid customer from the list.", false);
+                    toggleButtonLoading(button, false, '<i class="fas fa-comment-medical"></i> Add Update');
+                    return;
+                }
+
+                const newUpdate = {
+                    date: new Date().toISOString(), 
+                    customerId: customer.id, 
+                    customerName: customer.name,
+                    supportPerson: form.elements.supportPerson.value.trim(), 
+                    interactionType: form.elements.callStatus.value, 
+                    comment: form.elements.dailyComment.value.trim(),
+                };
+                
+                if (await this.handleApiRequest('add-daily-update', newUpdate, 'Update saved!')) {
+                    form.reset();
+                    await this.loadAllDataFromServer();
+                }
+                toggleButtonLoading(button, false, '<i class="fas fa-comment-medical"></i> Add Update');
+            },
+
+            async handleUpdateCustomer(e) {
+                e.preventDefault();
+                const form = e.target;
+                const button = form.querySelector('button[type="submit"]');
+                toggleButtonLoading(button, true, button.innerHTML);
+                const customerId = document.getElementById('updateCustomerIdModal').value;
+                const updatedData = {
+                    name: document.getElementById('updateName').value.trim(), phone: document.getElementById('updatePhone').value.trim(), email: document.getElementById('updateEmail').value.trim(), location: document.getElementById('updateLocation').value.trim(), leadStatus: document.getElementById('updateStatus').value, priority: document.getElementById('updatePriority').value, nextFollowUp: document.getElementById('updateFollowUp').value,
+                };
+                if (await this.handleApiRequest('update-customer', { id: customerId, data: updatedData }, 'Customer updated!')) {
+                    this.closeModal();
+                    await this.loadAllDataFromServer();
+                }
+                toggleButtonLoading(button, false, '<i class="fas fa-save"></i> Update Customer');
+            },
+
+            async handleDeleteCustomer(customerId) {
+                if (!confirm('Are you sure you want to delete this customer? This cannot be undone.')) return;
+                if (await this.handleApiRequest('delete-customer', { id: customerId }, 'Customer deleted.')) {
+                    await this.loadAllDataFromServer();
+                }
+            },
+
+            renderAll() {
+                const filtered = this.getFilteredCustomers();
+                this.displayCustomers(filtered);
+                this.displayDailyUpdates();
+                this.displayFollowUps();
+                this.populateUpdateCustomerDatalist(); // UPDATED
+                this.populateProductDatalist();
+                this.populateHistoryDatalist();
+                this.updateAnalyticsDashboard(filtered);
+                if (document.querySelector('#analytics.tab-content.active')) { this.renderCharts(filtered); }
+            },
+            
+            getFilteredCustomers() {
+                const searchTerm = document.getElementById('searchInput').value.toLowerCase().trim();
+                const statusFilter = document.getElementById('statusFilter').value;
+                const productFilter = document.getElementById('productFilter').value.toLowerCase().trim();
+
+                return this.customers.filter(customer => {
+                    const matchesSearch = !searchTerm ? true :
+                        (customer.name && customer.name.toLowerCase().includes(searchTerm)) ||
+                        (customer.phone && customer.phone.includes(searchTerm));
+                    const matchesStatus = !statusFilter ? true : customer.leadStatus === statusFilter;
+                    const matchesProduct = !productFilter ? true :
+                        (customer.interestedProduct && customer.interestedProduct.toLowerCase().includes(productFilter));
+                    return matchesSearch && matchesStatus && matchesProduct;
+                });
+            },
+
+            displayCustomers(filteredCustomers) {
+                const tableBody = document.getElementById('customerTableBody');
+                document.getElementById('customerTableHeader').innerHTML = `<tr><th>Customer</th><th>Contact</th><th>Interest</th><th>Status</th><th>Next Follow-up</th><th>Actions</th></tr>`;
+                if (filteredCustomers.length === 0) { tableBody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 2rem;">No customers match filters.</td></tr>'; return; }
+                tableBody.innerHTML = filteredCustomers.map(cust => `
+                    <tr>
+                        <td data-label="Customer"><strong>${cust.name}</strong><br><small>${cust.location || 'N/A'}</small></td>
+                        <td data-label="Contact" class="contact-links">
+                            <a href="tel:${cust.phone}" class="phone-link"><i class="fas fa-phone"></i> Call</a>
+                            <a href="https://wa.me/${formatPhoneForWhatsApp(cust.phone)}" class="whatsapp-link" target="_blank"><i class="fab fa-whatsapp"></i> WhatsApp</a>
+                        </td>
+                        <td data-label="Interest">${cust.interestedProduct || 'N/A'}</td>
+                        <td data-label="Status">${cust.leadStatus}</td>
+                        <td data-label="Next Follow-up">${cust.nextFollowUp || 'N/A'}</td>
+                        <td data-label="Actions">
+                            <button class="btn btn-secondary" style="padding: 5px 10px;" onclick="crmApp.openUpdateModal('${cust.id}')"><i class="fas fa-edit"></i></button>
+                            <button class="btn btn-danger" style="padding: 5px 10px;" onclick="crmApp.handleDeleteCustomer('${cust.id}')"><i class="fas fa-trash"></i></button>
+                        </td>
+                    </tr>`).join('');
+            },
+            
+            displayDailyUpdates() {
+                const list = document.getElementById('dailyUpdatesList');
+                if (this.dailyUpdates.length === 0) { list.innerHTML = '<p style="text-align:center;">No recent updates.</p>'; return; }
+                list.innerHTML = this.dailyUpdates.slice(0, 25).map(update => {
+                    const customer = this.customers.find(c => c.id === update.customerId);
+                    return `<div style="border-left: 3px solid var(--gold-primary); padding-left: 1rem; margin-bottom: 1rem;"><div style="display: flex; justify-content: space-between;"><strong>${update.customerName || (customer ? customer.name : 'Unknown')}</strong><small>${new Date(update.date).toLocaleDateString()}</small></div><p><em>By: ${update.supportPerson} | ${update.interactionType}</em></p><p>${update.comment}</p></div>`;
+                }).join('');
+            },
+
+            displayFollowUps() {
+                const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+                const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
+                const overdue = this.customers.filter(c => c.nextFollowUp && new Date(c.nextFollowUp) < todayStart);
+                const today = this.customers.filter(c => c.nextFollowUp && new Date(c.nextFollowUp) >= todayStart && new Date(c.nextFollowUp) <= todayEnd);
+                const upcoming = this.customers.filter(c => c.nextFollowUp && new Date(c.nextFollowUp) > todayEnd);
+                
+                // UPDATED: Render function now includes contact links
+                const renderList = (custs, isOverdue = false) => {
+                    if (custs.length === 0) return `<p style="text-align: center;">None</p>`;
+                    return custs.map(c => `
+                        <div class="follow-up-item ${isOverdue ? 'overdue' : ''}">
+                            <div onclick="crmApp.openUpdateModal('${c.id}')" style="cursor: pointer;">
+                                <strong>${c.name}</strong> (${c.phone})<br>
+                                <small>Due: ${new Date(c.nextFollowUp).toLocaleDateString()}</small>
+                            </div>
+                            <div class="follow-up-actions contact-links">
+                                <a href="tel:${c.phone}" class="phone-link"><i class="fas fa-phone"></i> Call</a>
+                                <a href="https://wa.me/${formatPhoneForWhatsApp(c.phone)}" class="whatsapp-link" target="_blank"><i class="fab fa-whatsapp"></i> WhatsApp</a>
+                            </div>
+                        </div>`).join('');
+                };
+
+                document.getElementById('overdueFollowUps').innerHTML = renderList(overdue, true);
+                document.getElementById('todayFollowUps').innerHTML = renderList(today);
+                document.getElementById('upcomingFollowUps').innerHTML = renderList(upcoming);
+            },
+
+            // NEW FUNCTION for daily updates customer selection
+            populateUpdateCustomerDatalist() {
+                const datalist = document.getElementById('updateCustomerDatalist');
+                if(!this.customers || !datalist) return;
+                datalist.innerHTML = this.customers.map(customer => `<option value="${customer.name} - ${customer.phone}"></option>`).join('');
+            },
+            
+            populateProductDatalist() {
+                const productList = document.getElementById('productList');
+                if(!this.customers || this.customers.length === 0) return;
+                const uniqueProducts = [...new Set(this.customers.map(c => c.interestedProduct).filter(p => p))];
+                productList.innerHTML = uniqueProducts.map(p => `<option value="${p}"></option>`).join('');
+            },
+            
+            populateHistoryDatalist() {
+                const datalist = document.getElementById('historyCustomerList');
+                if(!this.customers || !datalist) return;
+                datalist.innerHTML = this.customers.map(customer => `<option value="${customer.name} - ${customer.phone}" data-id="${customer.id}"></option>`).join('');
+            },
+            
+            handleHistorySearchInput(event) {
+                const value = event.target.value;
+                const options = document.getElementById('historyCustomerList').options;
+                for (let i = 0; i < options.length; i++) {
+                    if (options[i].value === value) {
+                        this.displayFullCustomerHistory(options[i].getAttribute('data-id'));
+                        break;
+                    }
+                }
+            },
+
+            searchAndDisplayHistory() {
+                const value = document.getElementById('historySearchInput').value;
+                const options = document.getElementById('historyCustomerList').options;
+                let customerId = null;
+                for (let i = 0; i < options.length; i++) {
+                    if (options[i].value === value) { customerId = options[i].getAttribute('data-id'); break; }
+                }
+                if (customerId) { this.displayFullCustomerHistory(customerId); } 
+                else { showNotification("Please select a valid customer.", false); }
+            },
+
+            displayFullCustomerHistory(customerId) {
+                const container = document.getElementById('customerHistoryLog');
+                if (!customerId) { container.style.display = 'none'; return; }
+                container.style.display = 'block';
+                const customer = this.customers.find(c => c.id === customerId);
+                const customerUpdates = this.dailyUpdates.filter(u => u.customerId === customerId);
+                const customerNotes = customer.notes || [];
+                const history = [...customerUpdates, ...customerNotes].sort((a,b) => new Date(b.date) - new Date(a.date));
+                if (history.length === 0) { container.innerHTML = '<p>No history recorded.</p>'; return; }
+                container.innerHTML = history.map(item => {
+                    const itemDate = new Date(item.date || item.timestamp).toLocaleString('en-IN');
+                    if (item.text) { 
+                        return `<div style="border-left: 3px solid #5bc0de; padding-left: 1rem; margin-bottom: 1rem;"><strong>Initial Note</strong> <small>(${itemDate})</small><p>${item.text}</p></div>`;
+                    } else {
+                        return `<div style="border-left: 3px solid var(--gold-primary); padding-left: 1rem; margin-bottom: 1rem;"><strong>Update by ${item.supportPerson}</strong> <small>(${itemDate})</small><p><em>Interaction: ${item.interactionType}</em></p><p>${item.comment}</p></div>`;
+                    }
+                }).join('');
+            },
+
+            updateAnalyticsDashboard(filteredCustomers) {
+                const dataSet = filteredCustomers || this.customers;
+                const total = dataSet.length;
+                const converted = dataSet.filter(c => c.leadStatus === 'Converted').length;
+                const today = new Date().toISOString().split('T')[0];
+                const todayUpdatesCount = this.dailyUpdates.filter(u => u.date.startsWith(today)).length;
+                const pendingFollowUps = dataSet.filter(c => c.nextFollowUp && new Date(c.nextFollowUp) < new Date()).length;
+                document.getElementById('totalLeads').textContent = total;
+                document.getElementById('conversionRate').textContent = total > 0 ? `${Math.round((converted/total)*100)}%` : '0%';
+                document.getElementById('todayUpdates').textContent = todayUpdatesCount;
+                document.getElementById('followUpPending').textContent = pendingFollowUps;
+                const sourceCounts = dataSet.reduce((acc, c) => { if (c.adSource) { acc[c.adSource] = (acc[c.adSource] || 0) + 1; } return acc; }, {});
+                const sourceDashboard = document.getElementById('sourceCountDashboard');
+                sourceDashboard.innerHTML = Object.keys(sourceCounts).map(source => `<div class="analytics-card"><h4>${sourceCounts[source]}</h4><p>${source}</p></div>`).join('');
+            },
+            
+            renderCharts(filteredCustomers) {
+                const dataSet = filteredCustomers || this.customers;
+                Object.values(this.charts).forEach(chart => { if (chart.destroy) chart.destroy(); });
+                const chartLabelColor = '#AAAAAA';
+                const statusCounts = dataSet.reduce((acc, c) => { acc[c.leadStatus] = (acc[c.leadStatus] || 0) + 1; return acc; }, {});
+                this.charts.status = new Chart(document.getElementById('statusChart').getContext('2d'), { type: 'doughnut', data: { labels: Object.keys(statusCounts), datasets: [{ data: Object.values(statusCounts), backgroundColor: ['#DCCA87', '#5bc0de', '#5cb85c', '#f0ad4e', '#d9534f', '#8a6de9'] }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: chartLabelColor } } } } });
+                const sourceCounts = dataSet.reduce((acc, c) => { acc[c.adSource] = (acc[c.adSource] || 0) + 1; return acc; }, {});
+                this.charts.source = new Chart(document.getElementById('sourceChart').getContext('2d'), { type: 'pie', data: { labels: Object.keys(sourceCounts), datasets: [{ data: Object.values(sourceCounts), backgroundColor: ['#DCCA87', '#AAAAAA', '#F5EFE1', '#5bc0de', '#5cb85c'] }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: chartLabelColor } } } } });
+            },
+
+            showTab(tabName, element) {
+                document.querySelectorAll('#crmPortal .tab-content').forEach(c => c.classList.remove('active'));
+                document.querySelectorAll('#crmPortal .tab-button').forEach(b => b.classList.remove('active'));
+                document.getElementById(tabName).classList.add('active');
+                element.classList.add('active');
+                if (tabName !== 'add-customer' && tabName !== 'daily-updates') { this.renderAll(); }
+            },
+
+            openUpdateModal(customerId) {
+                const customer = this.customers.find(c => c.id === customerId);
+                if (!customer) return;
+                const form = document.getElementById('updateForm');
+                form.elements.updateCustomerIdModal.value = customer.id; form.elements.updateName.value = customer.name; form.elements.updatePhone.value = customer.phone; form.elements.updateEmail.value = customer.email || ''; form.elements.updateLocation.value = customer.location || ''; form.elements.updateStatus.value = customer.leadStatus; form.elements.updatePriority.value = customer.priority; form.elements.updateFollowUp.value = customer.nextFollowUp || '';
+                this.displayCustomerHistoryInModal(customerId);
+                this.modal.classList.add('show');
+            },
+            
+            displayCustomerHistoryInModal(customerId) {
+                const container = document.getElementById('customerUpdateHistory');
+                const customer = this.customers.find(c => c.id === customerId);
+                const customerUpdates = this.dailyUpdates.filter(u => u.customerId === customerId);
+                const customerNotes = customer.notes || [];
+                const history = [...customerUpdates, ...customerNotes].sort((a,b) => new Date(b.date) - new Date(a.date));
+                if (history.length === 0) { container.innerHTML = '<p>No history for this customer.</p>'; return; }
+                container.innerHTML = history.slice(0, 5).map(item => {
+                    const itemDate = new Date(item.date || item.timestamp).toLocaleString('en-IN');
+                    if (item.text) {
+                        return `<div style="border-left: 3px solid #5bc0de; padding-left: 1rem; margin-bottom: 1rem;"><strong>Initial Note</strong> <small>(${itemDate})</small><p>${item.text}</p></div>`;
+                    } else {
+                        return `<div style="border-left: 3px solid var(--gold-primary); padding-left: 1rem; margin-bottom: 1rem;"><strong>Update by ${item.supportPerson}</strong> <small>(${itemDate})</small><p>${item.comment}</p></div>`;
+                    }
+                }).join('');
+            },
+
+            closeModal() { this.modal.classList.remove('show'); }
+        };
+
+        // ===================================================================================
+        // ============================ ORDER MANAGEMENT APP =================================
+        // ===================================================================================
+        const orderApp = {
+            orders: [],
+            archivedOrders: [],
+            charts: {},
+
+            init() {
+                this.showTab('new-order', document.querySelector('#orderPortal .tab-button'));
+                this.loadAllDataFromServer();
+                this.setupEventListeners();
+            },
+
+            async handleApiRequest(endpoint, body, successMessage) {
+                try {
+                    const response = await fetch(`/.netlify/functions/${endpoint}`, { 
+                        method: 'POST', 
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(body) 
+                    });
+                    if (!response.ok) {
+                        const err = await response.json();
+                        throw new Error(err.message || 'Server request failed');
+                    }
+                    showNotification(successMessage, true);
+                    return true;
+                } catch (error) {
+                    showNotification(`Error: ${error.message}`, false);
+                    return false;
+                }
+            },
+
+            async loadAllDataFromServer() {
+                try {
+                    const response = await fetch('/.netlify/functions/get-order-data');
+                    if (!response.ok) throw new Error(`Server error: ${response.statusText}`);
+                    const data = await response.json();
+                    this.orders = (data.orders || []).map(o => ({...o, id: o.id }));
+                    this.archivedOrders = (data.archivedOrders || []).map(o => ({...o, id: o.id }));
+                    this.orders.sort((a, b) => b.orderNumber - a.orderNumber);
+                    this.renderAll();
+                } catch(error) { showNotification(`Could not load Order data from the cloud. ${error.message}`, false); }
+            },
+            
+            renderAll() {
+                this.renderOrders();
+                this.populateWorkerDatalist();
+                this.populateOverseenByList(); // UPDATED
+                this.updateDashboard();
+                 if (document.querySelector('#order-dashboard.tab-content.active')) { this.renderCharts(); }
+            },
+
+            populateWorkerDatalist() {
+                const allKnownOrders = [...this.orders, ...this.archivedOrders];
+                const workerDatalist = document.getElementById('workerDatalist');
+                const uniqueWorkers = [...new Set(allKnownOrders.map(o => o.workerName).filter(Boolean))];
+                workerDatalist.innerHTML = uniqueWorkers.map(name => `<option value="${name}"></option>`).join('');
+            },
+
+            // NEW FUNCTION for Overseen By datalist
+            populateOverseenByList() {
+                const allKnownOrders = [...this.orders, ...this.archivedOrders];
+                const datalist = document.getElementById('overseenByList');
+                let uniqueOverseers = [...new Set(allKnownOrders.map(o => o.assignedTo).filter(Boolean))];
+                if (!uniqueOverseers.includes('Staff')) uniqueOverseers.unshift('Staff');
+                if (!uniqueOverseers.includes('Vasu Garu')) uniqueOverseers.unshift('Vasu Garu');
+                datalist.innerHTML = uniqueOverseers.map(name => `<option value="${name}"></option>`).join('');
+            },
+
+            showTab(tabName, element) {
+                document.querySelectorAll('#orderPortal .tab-content').forEach(c => c.classList.remove('active'));
+                document.querySelectorAll('#orderPortal .tab-button').forEach(b => b.classList.remove('active'));
+                document.getElementById(`order-${tabName}`).classList.add('active');
+                element.classList.add('active');
+                this.renderAll();
+            },
+
+            setupEventListeners() {
+                document.getElementById('newOrderForm').addEventListener('submit', (e) => this.handleAddOrder(e));
+                document.getElementById('updateOrderForm').addEventListener('submit', (e) => this.handleUpdateOrder(e));
+                document.getElementById('addNoteBtn').addEventListener('click', () => this.handleAddCustomerNote());
+                document.getElementById('orderUpdateModal').addEventListener('click', (e) => { if (e.target.id === 'orderUpdateModal') this.closeModal('orderUpdateModal'); });
+                document.getElementById('imageModal').addEventListener('click', () => this.closeModal('imageModal'));
+            },
+            
+            // UPDATED: No more Base64 conversion
+            async handleAddOrder(e) {
+                e.preventDefault();
+                const form = e.target;
+                const button = form.querySelector('button[type="submit"]');
+                toggleButtonLoading(button, true, button.innerHTML);
+
+                const imageFile = form.elements.itemPicture.files[0];
+                let itemPictureUrl = null;
+
+                // NEW: Firebase Storage Upload Logic
+                if (imageFile) {
+                    try {
+                        showNotification('Uploading image...', true);
+                        const filePath = `images/${Date.now()}_${imageFile.name}`;
+                        const fileRef = storage.ref(filePath);
+                        const snapshot = await fileRef.put(imageFile);
+                        itemPictureUrl = await snapshot.ref.getDownloadURL();
+                        showNotification('Image uploaded!', true);
+                    } catch (error) {
+                        showNotification("Image upload failed: " + error.message, false);
+                        toggleButtonLoading(button, false, '<i class="fas fa-save"></i> Save Order');
+                        return;
+                    }
+                }
+
+                const newOrder = {
+                    orderNumber: parseInt(form.elements.orderNumber.value), 
+                    customerName: form.elements.orderCustomerName.value.trim(), 
+                    phoneNumber: form.elements.orderPhoneNumber.value.trim(), 
+                    city: form.elements.city.value.trim(), 
+                    itemName: form.elements.itemName.value.trim(), 
+                    weight: form.elements.weight.value.trim(), 
+                    dueDate: form.elements.dueDate.value, 
+                    workerName: form.elements.workerName.value.trim(), 
+                    assignedTo: form.elements.assignedTo.value.trim(), 
+                    specifications: form.elements.specifications.value.trim(), 
+                    modifications: form.elements.modifications.value.trim(), 
+                    itemPictureUrl: itemPictureUrl, // This is now a URL
+                    status: 'Pending', 
+                    customerNotes: [], 
+                    dateAdded: new Date().toISOString()
+                };
+
+                if (await this.handleApiRequest('add-order', newOrder, 'Order saved successfully!')) {
+                    form.reset();
+                    await this.loadAllDataFromServer();
+                    this.showTab('order-tracking', document.querySelector('#orderPortal button[onclick*="order-tracking"]'));
+                }
+                toggleButtonLoading(button, false, '<i class="fas fa-save"></i> Save Order');
+            },
+            
+            renderOrders() {
+                const tableBody = document.getElementById('orderTableBody');
+                document.getElementById('orderTableHeader').innerHTML = `<tr><th>Image</th><th>Order #</th><th>Customer</th><th>Contact</th><th>Item</th><th>Worker</th><th>Due Date</th><th>Status</th><th>Actions</th></tr>`;
+                
+                const searchTerm = document.getElementById('orderSearchInput').value.toLowerCase();
+                const specialFilter = document.getElementById('specialFilter').value;
+                const showVasuGaru = document.getElementById('ownerToggle').checked;
+                const today = new Date(); today.setHours(0, 0, 0, 0);
+
+                let filteredOrders = this.orders.filter(o => {
+                    const matchesSearch = !searchTerm || o.orderNumber.toString().includes(searchTerm) || o.customerName.toLowerCase().includes(searchTerm) || o.phoneNumber.includes(searchTerm);
+                    
+                    // UPDATED: Visibility logic for Vasu Garu / Staff
+                    let matchesAssignment = false;
+                    if (showVasuGaru) {
+                        matchesAssignment = o.assignedTo === 'Vasu Garu';
+                    } else {
+                        // Staff sees their own orders, AND Vasu Garu's orders if a worker is assigned
+                        matchesAssignment = o.assignedTo === 'Staff' || (o.assignedTo === 'Vasu Garu' && o.workerName);
+                    }
                     
                     let matchesSpecial = false;
                     if (specialFilter === 'all') { matchesSpecial = o.status !== 'Delivered';
