@@ -828,7 +828,7 @@
 
 
  -->
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1176,9 +1176,12 @@
                 if (!isOrderInitialized) { orderApp.init(); isOrderInitialized = true; }
             } else if (portalName === 'staff') {
                 staffPortal.style.display = 'block';
-                // Staff data is loaded by the Order app, but we can initialize its own logic
-                if (!isStaffInitialized) { orderApp.initStaffPortal(); isStaffInitialized = true; }
-                orderApp.renderStaffList(); // Always re-render staff list when switching
+                if (!isStaffInitialized) { 
+                    orderApp.initStaffPortal(); 
+                    isStaffInitialized = true; 
+                } else {
+                    orderApp.renderStaffList(); // Always re-render if already initialized
+                }
             }
         }
 
@@ -1190,7 +1193,7 @@
         }
 
         // ===================================================================================
-        // ================================ INSTA CRM APP ====================================
+        // ================================ INSTA CRM APP (No Changes) =======================
         // ===================================================================================
         const crmApp = {
             customers: [], dailyUpdates: [], charts: {}, modal: null,
@@ -1213,7 +1216,7 @@
                         const err = await response.json();
                         throw new Error(err.message || 'Server request failed');
                     }
-                    showNotification(successMessage, true);
+                    if(successMessage) showNotification(successMessage, true);
                     return true;
                 } catch (error) {
                     showNotification(`Error: ${error.message}`, false);
@@ -1245,10 +1248,6 @@
                 this.modal.addEventListener('click', (e) => { if (e.target === this.modal) this.closeModal(); });
             },
             
-            async handleAddCustomer(e) { /* ... existing unchanged code ... */ },
-            async handleUpdateCustomer(e) { /* ... existing unchanged code ... */ },
-            async handleDeleteCustomer(customerId) { /* ... existing unchanged code ... */ },
-
             async handleAddDailyUpdate(e) {
                 e.preventDefault();
                 const form = e.target;
@@ -1290,9 +1289,6 @@
                 this.updateAnalyticsDashboard(filtered);
                 if (document.querySelector('#analytics.tab-content.active')) { this.renderCharts(filtered); }
             },
-            
-            getFilteredCustomers() { /* ... existing unchanged code ... */ },
-            displayCustomers(filteredCustomers) { /* ... existing unchanged code ... */ },
 
             displayDailyUpdates() {
                 const list = document.getElementById('dailyUpdatesList');
@@ -1375,33 +1371,30 @@
                     }
                 }
             },
-
-            searchAndDisplayHistory() { /* ... existing unchanged code ... */ },
-            displayFullCustomerHistory(customerId) { /* ... existing unchanged code ... */ },
-            updateAnalyticsDashboard(filteredCustomers) { /* ... existing unchanged code ... */ },
-            renderCharts(filteredCustomers) { /* ... existing unchanged code ... */ },
-            showTab(tabName, element) { /* ... existing unchanged code ... */ },
-            openUpdateModal(customerId) { /* ... existing unchanged code ... */ },
-            displayCustomerHistoryInModal(customerId) { /* ... existing unchanged code ... */ },
-            closeModal() { this.modal.classList.remove('show'); },
         };
         // Add existing unchanged CRM functions here to save space in the response
-        crmApp.handleAddCustomer = async function(e) { e.preventDefault(); const form = e.target; const button = form.querySelector('button[type="submit"]'); toggleButtonLoading(button, true, button.innerHTML); const newCustomer = { dateAdded: new Date().toISOString(), name: form.elements.customerName.value.trim(), phone: form.elements.phoneNumber.value.trim(), email: form.elements.email.value.trim(), location: form.elements.location.value.trim(), adSource: form.elements.adSource.value, interestedProduct: form.elements.interestedProduct.value.trim(), budget: form.elements.budget.value, leadStatus: form.elements.leadStatus.value, priority: form.elements.priority.value, nextFollowUp: form.elements.nextFollowUp.value, notes: [{ date: new Date().toISOString(), text: form.elements.initialResponse.value.trim() }] }; if (await this.handleApiRequest('add-customer', newCustomer, 'Customer saved!')) { form.reset(); await this.loadAllDataFromServer(); } toggleButtonLoading(button, false, '<i class="fas fa-save"></i> Save Customer'); };
-        crmApp.handleUpdateCustomer = async function(e) { e.preventDefault(); const form = e.target; const button = form.querySelector('button[type="submit"]'); toggleButtonLoading(button, true, button.innerHTML); const customerId = document.getElementById('updateCustomerIdModal').value; const updatedData = { name: document.getElementById('updateName').value.trim(), phone: document.getElementById('updatePhone').value.trim(), email: document.getElementById('updateEmail').value.trim(), location: document.getElementById('updateLocation').value.trim(), leadStatus: document.getElementById('updateStatus').value, priority: document.getElementById('updatePriority').value, nextFollowUp: document.getElementById('updateFollowUp').value, }; if (await this.handleApiRequest('update-customer', { id: customerId, data: updatedData }, 'Customer updated!')) { this.closeModal(); await this.loadAllDataFromServer(); } toggleButtonLoading(button, false, '<i class="fas fa-save"></i> Update Customer'); };
-        crmApp.handleDeleteCustomer = async function(customerId) { if (!confirm('Are you sure you want to delete this customer? This cannot be undone.')) return; if (await this.handleApiRequest('delete-customer', { id: customerId }, 'Customer deleted.')) { await this.loadAllDataFromServer(); } };
-        crmApp.getFilteredCustomers = function() { const searchTerm = document.getElementById('searchInput').value.toLowerCase().trim(); const statusFilter = document.getElementById('statusFilter').value; const productFilter = document.getElementById('productFilter').value.toLowerCase().trim(); return this.customers.filter(customer => { const matchesSearch = !searchTerm ? true : (customer.name && customer.name.toLowerCase().includes(searchTerm)) || (customer.phone && customer.phone.includes(searchTerm)); const matchesStatus = !statusFilter ? true : customer.leadStatus === statusFilter; const matchesProduct = !productFilter ? true : (customer.interestedProduct && customer.interestedProduct.toLowerCase().includes(productFilter)); return matchesSearch && matchesStatus && matchesProduct; }); };
-        crmApp.displayCustomers = function(filteredCustomers) { const tableBody = document.getElementById('customerTableBody'); document.getElementById('customerTableHeader').innerHTML = `<tr><th>Customer</th><th>Contact</th><th>Interest</th><th>Status</th><th>Next Follow-up</th><th>Actions</th></tr>`; if (filteredCustomers.length === 0) { tableBody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 2rem;">No customers match filters.</td></tr>'; return; } tableBody.innerHTML = filteredCustomers.map(cust => `<tr><td data-label="Customer"><strong>${cust.name}</strong><br><small>${cust.location || 'N/A'}</small></td><td data-label="Contact" class="contact-links"><a href="tel:${cust.phone}" class="phone-link"><i class="fas fa-phone"></i> Call</a><a href="https://wa.me/${formatPhoneForWhatsApp(cust.phone)}" class="whatsapp-link" target="_blank"><i class="fab fa-whatsapp"></i> WhatsApp</a></td><td data-label="Interest">${cust.interestedProduct || 'N/A'}</td><td data-label="Status">${cust.leadStatus}</td><td data-label="Next Follow-up">${cust.nextFollowUp || 'N/A'}</td><td data-label="Actions"><button class="btn btn-secondary" style="padding: 5px 10px;" onclick="crmApp.openUpdateModal('${cust.id}')"><i class="fas fa-edit"></i></button><button class="btn btn-danger" style="padding: 5px 10px;" onclick="crmApp.handleDeleteCustomer('${cust.id}')"><i class="fas fa-trash"></i></button></td></tr>`).join(''); };
-        crmApp.handleHistorySearchInput = function(event) { const value = event.target.value; const options = document.getElementById('historyCustomerList').options; for (let i = 0; i < options.length; i++) { if (options[i].value === value) { this.displayFullCustomerHistory(options[i].getAttribute('data-id')); break; } } };
-        crmApp.searchAndDisplayHistory = function() { const value = document.getElementById('historySearchInput').value; const options = document.getElementById('historyCustomerList').options; let customerId = null; for (let i = 0; i < options.length; i++) { if (options[i].value === value) { customerId = options[i].getAttribute('data-id'); break; } } if (customerId) { this.displayFullCustomerHistory(customerId); } else { showNotification("Please select a valid customer.", false); } };
-        crmApp.displayFullCustomerHistory = function(customerId) { const container = document.getElementById('customerHistoryLog'); if (!customerId) { container.style.display = 'none'; return; } container.style.display = 'block'; const customer = this.customers.find(c => c.id === customerId); const customerUpdates = this.dailyUpdates.filter(u => u.customerId === customerId); const customerNotes = customer.notes || []; const history = [...customerUpdates, ...customerNotes].sort((a,b) => new Date(b.date) - new Date(a.date)); if (history.length === 0) { container.innerHTML = '<p>No history recorded.</p>'; return; } container.innerHTML = history.map(item => { const itemDate = new Date(item.date || item.timestamp).toLocaleString('en-IN'); if (item.text) { return `<div style="border-left: 3px solid #5bc0de; padding-left: 1rem; margin-bottom: 1rem;"><strong>Initial Note</strong> <small>(${itemDate})</small><p>${item.text}</p></div>`; } else { return `<div style="border-left: 3px solid var(--gold-primary); padding-left: 1rem; margin-bottom: 1rem;"><strong>Update by ${item.supportPerson}</strong> <small>(${itemDate})</small><p><em>Interaction: ${item.interactionType}</em></p><p>${item.comment}</p></div>`; } }).join(''); };
-        crmApp.updateAnalyticsDashboard = function(filteredCustomers) { const dataSet = filteredCustomers || this.customers; const total = dataSet.length; const converted = dataSet.filter(c => c.leadStatus === 'Converted').length; const today = new Date().toISOString().split('T')[0]; const todayUpdatesCount = this.dailyUpdates.filter(u => u.date.startsWith(today)).length; const pendingFollowUps = dataSet.filter(c => c.nextFollowUp && new Date(c.nextFollowUp) < new Date()).length; document.getElementById('totalLeads').textContent = total; document.getElementById('conversionRate').textContent = total > 0 ? `${Math.round((converted/total)*100)}%` : '0%'; document.getElementById('todayUpdates').textContent = todayUpdatesCount; document.getElementById('followUpPending').textContent = pendingFollowUps; const sourceCounts = dataSet.reduce((acc, c) => { if (c.adSource) { acc[c.adSource] = (acc[c.adSource] || 0) + 1; } return acc; }, {}); const sourceDashboard = document.getElementById('sourceCountDashboard'); sourceDashboard.innerHTML = Object.keys(sourceCounts).map(source => `<div class="analytics-card"><h4>${sourceCounts[source]}</h4><p>${source}</p></div>`).join(''); };
-        crmApp.renderCharts = function(filteredCustomers) { const dataSet = filteredCustomers || this.customers; Object.values(this.charts).forEach(chart => { if (chart.destroy) chart.destroy(); }); const chartLabelColor = '#AAAAAA'; const statusCounts = dataSet.reduce((acc, c) => { acc[c.leadStatus] = (acc[c.leadStatus] || 0) + 1; return acc; }, {}); this.charts.status = new Chart(document.getElementById('statusChart').getContext('2d'), { type: 'doughnut', data: { labels: Object.keys(statusCounts), datasets: [{ data: Object.values(statusCounts), backgroundColor: ['#DCCA87', '#5bc0de', '#5cb85c', '#f0ad4e', '#d9534f', '#8a6de9'] }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: chartLabelColor } } } } }); const sourceCounts = dataSet.reduce((acc, c) => { acc[c.adSource] = (acc[c.adSource] || 0) + 1; return acc; }, {}); this.charts.source = new Chart(document.getElementById('sourceChart').getContext('2d'), { type: 'pie', data: { labels: Object.keys(sourceCounts), datasets: [{ data: Object.values(sourceCounts), backgroundColor: ['#DCCA87', '#AAAAAA', '#F5EFE1', '#5bc0de', '#5cb85c'] }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: chartLabelColor } } } } }); };
-        crmApp.showTab = function(tabName, element) { document.querySelectorAll('#crmPortal .tab-content').forEach(c => c.classList.remove('active')); document.querySelectorAll('#crmPortal .tab-button').forEach(b => b.classList.remove('active')); document.getElementById(tabName).classList.add('active'); element.classList.add('active'); if (tabName !== 'add-customer') { this.renderAll(); } };
-        crmApp.openUpdateModal = function(customerId) { const customer = this.customers.find(c => c.id === customerId); if (!customer) return; const form = document.getElementById('updateForm'); form.elements.updateCustomerIdModal.value = customer.id; form.elements.updateName.value = customer.name; form.elements.updatePhone.value = customer.phone; form.elements.updateEmail.value = customer.email || ''; form.elements.updateLocation.value = customer.location || ''; form.elements.updateStatus.value = customer.leadStatus; form.elements.updatePriority.value = customer.priority; form.elements.updateFollowUp.value = customer.nextFollowUp || ''; this.displayCustomerHistoryInModal(customerId); this.modal.classList.add('show'); };
-        crmApp.displayCustomerHistoryInModal = function(customerId) { const container = document.getElementById('customerUpdateHistory'); const customer = this.customers.find(c => c.id === customerId); const customerUpdates = this.dailyUpdates.filter(u => u.customerId === customerId); const customerNotes = customer.notes || []; const history = [...customerUpdates, ...customerNotes].sort((a,b) => new Date(b.date) - new Date(a.date)); if (history.length === 0) { container.innerHTML = '<p>No history for this customer.</p>'; return; } container.innerHTML = history.slice(0, 5).map(item => { const itemDate = new Date(item.date || item.timestamp).toLocaleString('en-IN'); if (item.text) { return `<div style="border-left: 3px solid #5bc0de; padding-left: 1rem; margin-bottom: 1rem;"><strong>Initial Note</strong> <small>(${itemDate})</small><p>${item.text}</p></div>`; } else { return `<div style="border-left: 3px solid var(--gold-primary); padding-left: 1rem; margin-bottom: 1rem;"><strong>Update by ${item.supportPerson}</strong> <small>(${itemDate})</small><p>${item.comment}</p></div>`; } }).join(''); };
+        (function() { // Using an IIFE to avoid polluting global scope
+            const unchangedFunctions = {
+                handleAddCustomer: async function(e) { e.preventDefault(); const form = e.target; const button = form.querySelector('button[type="submit"]'); toggleButtonLoading(button, true, button.innerHTML); const newCustomer = { dateAdded: new Date().toISOString(), name: form.elements.customerName.value.trim(), phone: form.elements.phoneNumber.value.trim(), email: form.elements.email.value.trim(), location: form.elements.location.value.trim(), adSource: form.elements.adSource.value, interestedProduct: form.elements.interestedProduct.value.trim(), budget: form.elements.budget.value, leadStatus: form.elements.leadStatus.value, priority: form.elements.priority.value, nextFollowUp: form.elements.nextFollowUp.value, notes: [{ date: new Date().toISOString(), text: form.elements.initialResponse.value.trim() }] }; if (await this.handleApiRequest('add-customer', newCustomer, 'Customer saved!')) { form.reset(); await this.loadAllDataFromServer(); } toggleButtonLoading(button, false, '<i class="fas fa-save"></i> Save Customer'); },
+                handleUpdateCustomer: async function(e) { e.preventDefault(); const form = e.target; const button = form.querySelector('button[type="submit"]'); toggleButtonLoading(button, true, button.innerHTML); const customerId = document.getElementById('updateCustomerIdModal').value; const updatedData = { name: document.getElementById('updateName').value.trim(), phone: document.getElementById('updatePhone').value.trim(), email: document.getElementById('updateEmail').value.trim(), location: document.getElementById('updateLocation').value.trim(), leadStatus: document.getElementById('updateStatus').value, priority: document.getElementById('updatePriority').value, nextFollowUp: document.getElementById('updateFollowUp').value, }; if (await this.handleApiRequest('update-customer', { id: customerId, data: updatedData }, 'Customer updated!')) { this.closeModal(); await this.loadAllDataFromServer(); } toggleButtonLoading(button, false, '<i class="fas fa-save"></i> Update Customer'); },
+                handleDeleteCustomer: async function(customerId) { if (!confirm('Are you sure you want to delete this customer? This cannot be undone.')) return; if (await this.handleApiRequest('delete-customer', { id: customerId }, 'Customer deleted.')) { await this.loadAllDataFromServer(); } },
+                getFilteredCustomers: function() { const searchTerm = document.getElementById('searchInput').value.toLowerCase().trim(); const statusFilter = document.getElementById('statusFilter').value; const productFilter = document.getElementById('productFilter').value.toLowerCase().trim(); return this.customers.filter(customer => { const matchesSearch = !searchTerm ? true : (customer.name && customer.name.toLowerCase().includes(searchTerm)) || (customer.phone && customer.phone.includes(searchTerm)); const matchesStatus = !statusFilter ? true : customer.leadStatus === statusFilter; const matchesProduct = !productFilter ? true : (customer.interestedProduct && customer.interestedProduct.toLowerCase().includes(productFilter)); return matchesSearch && matchesStatus && matchesProduct; }); },
+                displayCustomers: function(filteredCustomers) { const tableBody = document.getElementById('customerTableBody'); document.getElementById('customerTableHeader').innerHTML = `<tr><th>Customer</th><th>Contact</th><th>Interest</th><th>Status</th><th>Next Follow-up</th><th>Actions</th></tr>`; if (filteredCustomers.length === 0) { tableBody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 2rem;">No customers match filters.</td></tr>'; return; } tableBody.innerHTML = filteredCustomers.map(cust => `<tr><td data-label="Customer"><strong>${cust.name}</strong><br><small>${cust.location || 'N/A'}</small></td><td data-label="Contact" class="contact-links"><a href="tel:${cust.phone}" class="phone-link"><i class="fas fa-phone"></i> Call</a><a href="https://wa.me/${formatPhoneForWhatsApp(cust.phone)}" class="whatsapp-link" target="_blank"><i class="fab fa-whatsapp"></i> WhatsApp</a></td><td data-label="Interest">${cust.interestedProduct || 'N/A'}</td><td data-label="Status">${cust.leadStatus}</td><td data-label="Next Follow-up">${cust.nextFollowUp || 'N/A'}</td><td data-label="Actions"><button class="btn btn-secondary" style="padding: 5px 10px;" onclick="crmApp.openUpdateModal('${cust.id}')"><i class="fas fa-edit"></i></button><button class="btn btn-danger" style="padding: 5px 10px;" onclick="crmApp.handleDeleteCustomer('${cust.id}')"><i class="fas fa-trash"></i></button></td></tr>`).join(''); },
+                handleHistorySearchInput: function(event) { const value = event.target.value; const options = document.getElementById('historyCustomerList').options; for (let i = 0; i < options.length; i++) { if (options[i].value === value) { this.displayFullCustomerHistory(options[i].getAttribute('data-id')); break; } } },
+                searchAndDisplayHistory: function() { const value = document.getElementById('historySearchInput').value; const options = document.getElementById('historyCustomerList').options; let customerId = null; for (let i = 0; i < options.length; i++) { if (options[i].value === value) { customerId = options[i].getAttribute('data-id'); break; } } if (customerId) { this.displayFullCustomerHistory(customerId); } else { showNotification("Please select a valid customer.", false); } },
+                displayFullCustomerHistory: function(customerId) { const container = document.getElementById('customerHistoryLog'); if (!customerId) { container.style.display = 'none'; return; } container.style.display = 'block'; const customer = this.customers.find(c => c.id === customerId); const customerUpdates = this.dailyUpdates.filter(u => u.customerId === customerId); const customerNotes = customer.notes || []; const history = [...customerUpdates, ...customerNotes].sort((a,b) => new Date(b.date) - new Date(a.date)); if (history.length === 0) { container.innerHTML = '<p>No history recorded.</p>'; return; } container.innerHTML = history.map(item => { const itemDate = new Date(item.date || item.timestamp).toLocaleString('en-IN'); if (item.text) { return `<div style="border-left: 3px solid #5bc0de; padding-left: 1rem; margin-bottom: 1rem;"><strong>Initial Note</strong> <small>(${itemDate})</small><p>${item.text}</p></div>`; } else { return `<div style="border-left: 3px solid var(--gold-primary); padding-left: 1rem; margin-bottom: 1rem;"><strong>Update by ${item.supportPerson}</strong> <small>(${itemDate})</small><p><em>Interaction: ${item.interactionType}</em></p><p>${item.comment}</p></div>`; } }).join(''); },
+                updateAnalyticsDashboard: function(filteredCustomers) { const dataSet = filteredCustomers || this.customers; const total = dataSet.length; const converted = dataSet.filter(c => c.leadStatus === 'Converted').length; const today = new Date().toISOString().split('T')[0]; const todayUpdatesCount = this.dailyUpdates.filter(u => u.date.startsWith(today)).length; const pendingFollowUps = dataSet.filter(c => c.nextFollowUp && new Date(c.nextFollowUp) < new Date()).length; document.getElementById('totalLeads').textContent = total; document.getElementById('conversionRate').textContent = total > 0 ? `${Math.round((converted/total)*100)}%` : '0%'; document.getElementById('todayUpdates').textContent = todayUpdatesCount; document.getElementById('followUpPending').textContent = pendingFollowUps; const sourceCounts = dataSet.reduce((acc, c) => { if (c.adSource) { acc[c.adSource] = (acc[c.adSource] || 0) + 1; } return acc; }, {}); const sourceDashboard = document.getElementById('sourceCountDashboard'); sourceDashboard.innerHTML = Object.keys(sourceCounts).map(source => `<div class="analytics-card"><h4>${sourceCounts[source]}</h4><p>${source}</p></div>`).join(''); },
+                renderCharts: function(filteredCustomers) { const dataSet = filteredCustomers || this.customers; Object.values(this.charts).forEach(chart => { if (chart.destroy) chart.destroy(); }); const chartLabelColor = '#AAAAAA'; const statusCounts = dataSet.reduce((acc, c) => { acc[c.leadStatus] = (acc[c.leadStatus] || 0) + 1; return acc; }, {}); this.charts.status = new Chart(document.getElementById('statusChart').getContext('2d'), { type: 'doughnut', data: { labels: Object.keys(statusCounts), datasets: [{ data: Object.values(statusCounts), backgroundColor: ['#DCCA87', '#5bc0de', '#5cb85c', '#f0ad4e', '#d9534f', '#8a6de9'] }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: chartLabelColor } } } } }); const sourceCounts = dataSet.reduce((acc, c) => { acc[c.adSource] = (acc[c.adSource] || 0) + 1; return acc; }, {}); this.charts.source = new Chart(document.getElementById('sourceChart').getContext('2d'), { type: 'pie', data: { labels: Object.keys(sourceCounts), datasets: [{ data: Object.values(sourceCounts), backgroundColor: ['#DCCA87', '#AAAAAA', '#F5EFE1', '#5bc0de', '#5cb85c'] }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: chartLabelColor } } } } }); },
+                showTab: function(tabName, element) { document.querySelectorAll('#crmPortal .tab-content').forEach(c => c.classList.remove('active')); document.querySelectorAll('#crmPortal .tab-button').forEach(b => b.classList.remove('active')); document.getElementById(tabName).classList.add('active'); element.classList.add('active'); if (tabName !== 'add-customer') { this.renderAll(); } },
+                openUpdateModal: function(customerId) { const customer = this.customers.find(c => c.id === customerId); if (!customer) return; const form = document.getElementById('updateForm'); form.elements.updateCustomerIdModal.value = customer.id; form.elements.updateName.value = customer.name; form.elements.updatePhone.value = customer.phone; form.elements.updateEmail.value = customer.email || ''; form.elements.updateLocation.value = customer.location || ''; form.elements.updateStatus.value = customer.leadStatus; form.elements.updatePriority.value = customer.priority; form.elements.updateFollowUp.value = customer.nextFollowUp || ''; this.displayCustomerHistoryInModal(customerId); this.modal.classList.add('show'); },
+                displayCustomerHistoryInModal: function(customerId) { const container = document.getElementById('customerUpdateHistory'); const customer = this.customers.find(c => c.id === customerId); const customerUpdates = this.dailyUpdates.filter(u => u.customerId === customerId); const customerNotes = customer.notes || []; const history = [...customerUpdates, ...customerNotes].sort((a,b) => new Date(b.date) - new Date(a.date)); if (history.length === 0) { container.innerHTML = '<p>No history for this customer.</p>'; return; } container.innerHTML = history.slice(0, 5).map(item => { const itemDate = new Date(item.date || item.timestamp).toLocaleString('en-IN'); if (item.text) { return `<div style="border-left: 3px solid #5bc0de; padding-left: 1rem; margin-bottom: 1rem;"><strong>Initial Note</strong> <small>(${itemDate})</small><p>${item.text}</p></div>`; } else { return `<div style="border-left: 3px solid var(--gold-primary); padding-left: 1rem; margin-bottom: 1rem;"><strong>Update by ${item.supportPerson}</strong> <small>(${itemDate})</small><p>${item.comment}</p></div>`; } }).join(''); },
+                closeModal: function() { this.modal.classList.remove('show'); }
+            };
+            Object.assign(crmApp, unchangedFunctions);
+        })();
 
         // ===================================================================================
-        // ============================ ORDER MANAGEMENT & STAFF APP =========================
+        // ======================= ORDER MANAGEMENT & STAFF APP (Error Fix Applied) ==========
         // ===================================================================================
         const orderApp = {
             orders: [], archivedOrders: [], staff: [], charts: {},
@@ -1413,11 +1406,16 @@
             },
 
             initStaffPortal() {
-                this.loadAllDataFromServer(); // Ensure data is loaded
+                // Load data if it hasn't been loaded yet.
+                if (this.staff.length === 0 && this.orders.length === 0) {
+                    this.loadAllDataFromServer();
+                } else {
+                    this.renderStaffList();
+                }
                 document.getElementById('addStaffForm').addEventListener('submit', (e) => this.handleAddStaff(e));
             },
 
-            async handleApiRequest(endpoint, body, successMessage) { /* Same as CRM */ },
+            async handleApiRequest(endpoint, body, successMessage) { return crmApp.handleApiRequest(endpoint, body, successMessage); },
             
             async loadAllDataFromServer() {
                 try {
@@ -1430,8 +1428,13 @@
                     this.staff = (data.staff || []).map(s => ({...s, id: s.id }));
 
                     this.orders.sort((a, b) => b.orderNumber - a.orderNumber);
-                    this.renderAll();
-                } catch(error) { showNotification(`Could not load Order data. ${error.message}`, false); }
+                    
+                    // This will render everything for the order portal
+                    this.renderAll(); 
+                    // This will render the list if the user is on the staff portal
+                    this.renderStaffList();
+
+                } catch(error) { showNotification(`Could not load Order data. ${error.message}`, false); console.error(error); }
             },
             
             renderAll() {
@@ -1442,13 +1445,17 @@
             },
             
             populateDatalistsAndFilters() {
-                // Workers
                 const allKnownOrders = [...this.orders, ...this.archivedOrders];
-                const workerDatalist = document.getElementById('workerDatalist');
-                const uniqueWorkers = [...new Set(allKnownOrders.flatMap(o => o.items.map(i => i.workerName)).filter(Boolean))];
-                if(workerDatalist) workerDatalist.innerHTML = uniqueWorkers.map(name => `<option value="${name}"></option>`).join('');
+                const workerDatalist = document.querySelector('#order-new-order [list="workerDatalist"]');
+                // *** FIX: Check if order has items before trying to map them ***
+                const uniqueWorkers = [...new Set(allKnownOrders.flatMap(o => (o.items || []).map(i => i.workerName)).filter(Boolean))];
+                if(workerDatalist) {
+                    const datalist = document.getElementById('workerDatalist') || document.createElement('datalist');
+                    datalist.id = 'workerDatalist';
+                    datalist.innerHTML = uniqueWorkers.map(name => `<option value="${name}"></option>`).join('');
+                    document.body.appendChild(datalist); // Ensure it's in the DOM
+                }
 
-                // Staff for filters and forms
                 const staffFilter = document.getElementById('staffFilter');
                 const assignedToSelect = document.getElementById('assignedTo');
                 const staffOptions = this.staff.map(s => `<option value="${s.name}">${s.name}</option>`).join('');
@@ -1472,8 +1479,6 @@
                 document.getElementById('orderUpdateModal').addEventListener('click', (e) => { if (e.target.id === 'orderUpdateModal') this.closeModal('orderUpdateModal'); });
                 document.getElementById('imageModal').addEventListener('click', () => this.closeModal('imageModal'));
             },
-            
-            fileToBase64(file) { /* Same as before */ },
 
             addOrderItemRow() {
                 const container = document.getElementById('orderItemsList');
@@ -1496,9 +1501,7 @@
                 container.insertAdjacentHTML('beforeend', itemHtml);
             },
 
-            removeOrderItemRow(itemId) {
-                document.getElementById(itemId)?.remove();
-            },
+            removeOrderItemRow(itemId) { document.getElementById(itemId)?.remove(); },
 
             async handleAddOrder(e) {
                 e.preventDefault();
@@ -1530,20 +1533,7 @@
                 }
 
                 const newOrder = {
-                    orderNumber: parseInt(form.elements.orderNumber.value),
-                    customerName: form.elements.orderCustomerName.value.trim(),
-                    phoneNumber: form.elements.orderPhoneNumber.value.trim(),
-                    city: form.elements.city.value.trim(),
-                    orderDate: form.elements.orderDate.value || new Date().toISOString().split('T')[0],
-                    deliveryDate: form.elements.deliveryDate.value,
-                    assignedTo: form.elements.assignedTo.value,
-                    specifications: form.elements.specifications.value.trim(),
-                    modifications: form.elements.modifications.value.trim(),
-                    itemPictureUrl: itemPictureUrl,
-                    status: 'Pending', // Overall status, can be updated later
-                    customerNotes: [],
-                    dateAdded: new Date().toISOString(),
-                    items: items
+                    orderNumber: parseInt(form.elements.orderNumber.value), customerName: form.elements.orderCustomerName.value.trim(), phoneNumber: form.elements.orderPhoneNumber.value.trim(), city: form.elements.city.value.trim(), orderDate: form.elements.orderDate.value || new Date().toISOString().split('T')[0], deliveryDate: form.elements.deliveryDate.value, assignedTo: form.elements.assignedTo.value, specifications: form.elements.specifications.value.trim(), modifications: form.elements.modifications.value.trim(), itemPictureUrl: itemPictureUrl, status: 'Pending', customerNotes: [], dateAdded: new Date().toISOString(), items: items
                 };
 
                 if (await this.handleApiRequest('add-order', newOrder, 'Order saved successfully!')) {
@@ -1571,7 +1561,9 @@
                     let matchesSpecial = false;
                     if (specialFilter === 'all') { matchesSpecial = o.status !== 'Delivered';
                     } else if (specialFilter === 'overdue') { matchesSpecial = o.deliveryDate && new Date(o.deliveryDate) < today && o.status !== 'Delivered';
-                    } else if (specialFilter === 'unassigned') { matchesSpecial = o.items.some(item => !item.workerName);
+                    } else if (specialFilter === 'unassigned') {
+                        // *** FIX: Safely check items array ***
+                        matchesSpecial = (o.items || []).some(item => !item.workerName);
                     } else if (specialFilter === 'completedNotDelivered') { 
                         matchesSpecial = o.status === 'Completed';
                     }
@@ -1582,6 +1574,7 @@
 
                 let tableHtml = '';
                 filteredOrders.forEach(order => {
+                    const items = order.items || []; // *** FIX: Default to empty array ***
                     const isOverdue = order.deliveryDate && new Date(order.deliveryDate) < today && order.status !== 'Delivered';
                     const dateHtml = order.deliveryDate ? `${new Date(order.deliveryDate).toLocaleDateString('en-IN')} ${isOverdue ? '<i class="fas fa-exclamation-triangle" style="color: var(--danger-red);"></i>' : ''}` : 'N/A';
                     const imageHtml = order.itemPictureUrl ? `<img src="${order.itemPictureUrl}" class="order-image-thumbnail" onclick="orderApp.openImageModal('${order.id}')">` : `<span>No Image</span>`;
@@ -1594,30 +1587,27 @@
                         <td data-label="Contact" class="contact-links"><a href="tel:${order.phoneNumber}" class="phone-link"><i class="fas fa-phone"></i></a><a href="https://wa.me/${formatPhoneForWhatsApp(order.phoneNumber)}" class="whatsapp-link" target="_blank"><i class="fab fa-whatsapp"></i></a></td>
                         <td data-label="Delivery Date">${dateHtml}</td>
                         <td data-label="Overseen By">${order.assignedTo || 'N/A'}</td>
-                        <td data-label="Items"><button class="btn btn-secondary" style="padding: 5px 10px;" onclick="orderApp.toggleItemDetails('${order.id}')">${order.items.length} Items</button></td>
+                        <td data-label="Items"><button class="btn btn-secondary" style="padding: 5px 10px;" onclick="orderApp.toggleItemDetails('${order.id}')">${items.length} Items</button></td>
                         <td data-label="Actions"><button class="btn btn-primary" style="padding: 5px 10px;" onclick="orderApp.openUpdateModal('${order.id}')"><i class="fas fa-edit"></i></button></td>
                     </tr>
                     <tr class="details-row" id="details-row-${order.id}"><td colspan="8">
                         <div class="details-content">
                             <h4>Item Details</h4>
-                            ${order.items.map(item => `
+                            ${items.length > 0 ? items.map(item => `
                                 <div class="note-item">
-                                    <p><strong>${item.name}</strong> (${item.weight}g) - <span class="status-badge status-${item.status.replace('-','')}">${item.status}</span></p>
+                                    <p><strong>${item.name}</strong> (${item.weight}g) - <span class="status-badge status-${(item.status || '').replace('-','')}">${item.status}</span></p>
                                     <small>Worker: ${item.workerName || 'Unassigned'}</small>
                                 </div>
-                            `).join('')}
-                            ${order.specifications ? `<h4>Specifications</h4><p>${order.specifications}</p>` : ''}
-                            ${order.modifications ? `<h4>Modifications</h4><p>${order.modifications}</p>` : ''}
+                            `).join('') : '<p>No items found for this order.</p>'}
+                            ${order.specifications ? `<h4>Specifications</h4><p>${order.specifications.replace(/\n/g, '<br>')}</p>` : ''}
+                            ${order.modifications ? `<h4>Modifications</h4><p>${order.modifications.replace(/\n/g, '<br>')}</p>` : ''}
                         </div>
                     </td></tr>`;
                 });
                 tableBody.innerHTML = tableHtml;
             },
             
-            toggleItemDetails(orderId) {
-                const detailsRow = document.getElementById(`details-row-${orderId}`);
-                detailsRow.classList.toggle('show');
-            },
+            toggleItemDetails(orderId) { document.getElementById(`details-row-${orderId}`).classList.toggle('show'); },
 
             async handleUpdateOrder(e) {
                 e.preventDefault();
@@ -1628,10 +1618,7 @@
                 const updatedItems = [];
                 document.querySelectorAll('#updateOrderItemsList .order-item-row').forEach(row => {
                     updatedItems.push({
-                        name: row.dataset.name,
-                        weight: row.dataset.weight,
-                        workerName: row.querySelector('.update-item-worker').value,
-                        status: row.querySelector('.update-item-status').value
+                        name: row.dataset.name, weight: row.dataset.weight, workerName: row.querySelector('.update-item-worker').value, status: row.querySelector('.update-item-status').value
                     });
                 });
                 
@@ -1639,21 +1626,15 @@
                 const mainStatus = allItemsCompleted ? 'Completed' : 'In-Progress';
 
                 const updates = {
-                    items: updatedItems,
-                    specifications: document.getElementById('updateSpecifications').value.trim(),
-                    modifications: document.getElementById('updateModifications').value.trim(),
-                    status: mainStatus,
+                    items: updatedItems, specifications: document.getElementById('updateSpecifications').value.trim(), modifications: document.getElementById('updateModifications').value.trim(), status: mainStatus,
                 };
                 
                 if (await this.handleApiRequest('update-order', { id: orderId, updates: updates }, 'Order updated!')) {
+                    this.closeModal('orderUpdateModal');
                     await this.loadAllDataFromServer();
                 }
                 toggleButtonLoading(button, false, '<i class="fas fa-save"></i> Save Changes');
             },
-
-            async handleAddCustomerNote() { /* ... existing unchanged code ... */ },
-            updateDashboard() { /* ... existing unchanged code ... */ },
-            renderCharts() { /* ... existing unchanged code ... */ },
             
             openUpdateModal(orderId) {
                 const order = this.orders.find(o => o.id === orderId);
@@ -1663,7 +1644,8 @@
                 document.getElementById('updateModifications').value = order.modifications || '';
 
                 const itemsContainer = document.getElementById('updateOrderItemsList');
-                itemsContainer.innerHTML = order.items.map(item => `
+                const items = order.items || []; // *** FIX: Safely access items ***
+                itemsContainer.innerHTML = items.map(item => `
                     <div class="order-item-row" data-name="${item.name}" data-weight="${item.weight}">
                         <div class="form-group">
                             <label>${item.name} (${item.weight}g)</label>
@@ -1684,15 +1666,25 @@
                 this.renderNotesHistory(order.customerNotes || []);
                 document.getElementById('orderUpdateModal').classList.add('show');
             },
-
-            renderNotesHistory(notes) { /* ... existing unchanged code ... */ },
-            openImageModal(orderId) { /* ... existing unchanged code ... */ },
-            closeModal(modalId) {  const modal = document.getElementById(modalId); if (modal) modal.classList.remove('show'); },
+            
+            renderCharts() { 
+                if (this.charts.worker) this.charts.worker.destroy(); 
+                const allKnownOrders = [...this.orders, ...this.archivedOrders]; 
+                const workerCounts = allKnownOrders.reduce((acc, order) => { 
+                    (order.items || []).forEach(item => { // *** FIX: Safely access items ***
+                        const worker = item.workerName || 'Unassigned'; 
+                        acc[worker] = (acc[worker] || 0) + 1; 
+                    }); return acc; 
+                }, {}); 
+                if(document.getElementById('workerChart')) {
+                    this.charts.worker = new Chart(document.getElementById('workerChart').getContext('2d'), { type: 'bar', data: { labels: Object.keys(workerCounts), datasets: [{ label: 'Number of Items Assigned', data: Object.values(workerCounts), backgroundColor: '#DCCA87' }] }, options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, ticks: { color: '#AAAAAA', stepSize: 1 } }, x: { ticks: { color: '#AAAAAA' } } }, plugins: { legend: { display: false } } } }); 
+                }
+            },
 
             // --- Staff Management Functions ---
             renderStaffList() {
                 const container = document.getElementById('staffListContainer');
-                if(!container) return;
+                if(!container) return; // Don't run if not on staff page
                 if (this.staff.length === 0) {
                     container.innerHTML = '<p style="text-align:center;">No staff members added yet.</p>';
                     return;
@@ -1709,17 +1701,13 @@
 
             async handleAddStaff(e) {
                 e.preventDefault();
-                const form = e.target;
                 const input = document.getElementById('newStaffName');
                 const name = input.value.trim();
-                if (!name) {
-                    showNotification("Staff name cannot be empty.", false);
-                    return;
-                }
+                if (!name) return showNotification("Staff name cannot be empty.", false);
+                
                 if (await this.handleApiRequest('add-staff', { name }, 'Staff member added!')) {
                     input.value = '';
-                    await this.loadAllDataFromServer(); // Reload all data to update lists
-                    this.renderStaffList(); // Re-render the staff list in the modal
+                    await this.loadAllDataFromServer(); // This reloads all data and re-renders everything
                 }
             },
 
@@ -1727,18 +1715,21 @@
                 if (!confirm('Are you sure you want to delete this staff member?')) return;
                 if (await this.handleApiRequest('delete-staff', { id: staffId }, 'Staff member deleted.')) {
                     await this.loadAllDataFromServer();
-                    this.renderStaffList();
                 }
             },
         };
-        orderApp.handleApiRequest = crmApp.handleApiRequest; // Reuse the same function
         // Add existing unchanged Order App functions here
-        orderApp.fileToBase64 = function(file) { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.readAsDataURL(file); reader.onload = () => resolve(reader.result); reader.onerror = error => reject(error); }); };
-        orderApp.handleAddCustomerNote = async function() { const orderId = document.getElementById('updateOrderId').value; const noteText = document.getElementById('newCustomerNote').value.trim(); if (!noteText) { showNotification("Note cannot be empty.", false); return; } const newNote = { text: noteText, timestamp: new Date().toISOString() }; if (await this.handleApiRequest('add-order-note', { id: orderId, note: newNote }, 'Note added!')) { document.getElementById('newCustomerNote').value = ''; await this.loadAllDataFromServer(); const order = this.orders.find(o => o.id === orderId); this.renderNotesHistory(order ? order.customerNotes : []); } };
-        orderApp.updateDashboard = function() { const totalActiveOrders = this.orders.length; const pending = this.orders.filter(o => o.status === 'Pending').length; const inProgress = this.orders.filter(o => o.status === 'In-Progress').length; const overdue = this.orders.filter(o => o.deliveryDate && new Date(o.deliveryDate) < new Date() && o.status !== 'Delivered').length; document.querySelector('#orderAnalyticsDashboard #totalOrders').textContent = totalActiveOrders + this.archivedOrders.length; document.querySelector('#orderAnalyticsDashboard #pendingOrders').textContent = pending; document.querySelector('#orderAnalyticsDashboard #inProgressOrders').textContent = inProgress; document.querySelector('#orderAnalyticsDashboard #overdueCount').textContent = overdue; document.querySelector('#orderAnalyticsDashboard #deliveredCount').textContent = this.archivedOrders.length; };
-        orderApp.renderCharts = function() { if (this.charts.worker) this.charts.worker.destroy(); const allKnownOrders = [...this.orders, ...this.archivedOrders]; const workerCounts = allKnownOrders.reduce((acc, order) => { (order.items || []).forEach(item => { const worker = item.workerName || 'Unassigned'; acc[worker] = (acc[worker] || 0) + 1; }); return acc; }, {}); this.charts.worker = new Chart(document.getElementById('workerChart').getContext('2d'), { type: 'bar', data: { labels: Object.keys(workerCounts), datasets: [{ label: 'Number of Items Assigned', data: Object.values(workerCounts), backgroundColor: '#DCCA87' }] }, options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, ticks: { color: '#AAAAAA', stepSize: 1 } }, x: { ticks: { color: '#AAAAAA' } } }, plugins: { legend: { display: false } } } }); };
-        orderApp.renderNotesHistory = function(notes) { const historyContainer = document.getElementById('orderUpdateModal').querySelector('#customerNotesHistory'); if (!notes || notes.length === 0) { historyContainer.innerHTML = '<p style="text-align: center;">No notes yet.</p>'; return; } historyContainer.innerHTML = [...notes].reverse().map(note => { const formattedDate = new Date(note.timestamp).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' }); return `<div class="note-item"><p>${note.text}</p><small>${formattedDate}</small></div>`; }).join(''); };
-        orderApp.openImageModal = function(orderId) { const order = this.orders.find(o => o.id === orderId); if (order && order.itemPictureUrl) { document.getElementById('fullSizeImage').src = order.itemPictureUrl; document.getElementById('imageModal').classList.add('show'); } };
+        (function() { // Using an IIFE to avoid polluting global scope
+            const unchangedFunctions = {
+                fileToBase64: function(file) { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.readAsDataURL(file); reader.onload = () => resolve(reader.result); reader.onerror = error => reject(error); }); },
+                handleAddCustomerNote: async function() { const orderId = document.getElementById('updateOrderId').value; const noteText = document.getElementById('newCustomerNote').value.trim(); if (!noteText) { showNotification("Note cannot be empty.", false); return; } const newNote = { text: noteText, timestamp: new Date().toISOString() }; if (await this.handleApiRequest('add-order-note', { id: orderId, note: newNote }, 'Note added!')) { document.getElementById('newCustomerNote').value = ''; await this.loadAllDataFromServer(); const order = this.orders.find(o => o.id === orderId); this.renderNotesHistory(order ? order.customerNotes : []); } },
+                updateDashboard: function() { const totalActiveOrders = this.orders.length; const pending = this.orders.filter(o => o.status === 'Pending').length; const inProgress = this.orders.filter(o => o.status === 'In-Progress').length; const overdue = this.orders.filter(o => o.deliveryDate && new Date(o.deliveryDate) < new Date() && o.status !== 'Delivered').length; const dashboard = document.getElementById('orderAnalyticsDashboard'); if(!dashboard) return; dashboard.querySelector('#totalOrders').textContent = totalActiveOrders + this.archivedOrders.length; dashboard.querySelector('#pendingOrders').textContent = pending; dashboard.querySelector('#inProgressOrders').textContent = inProgress; dashboard.querySelector('#overdueCount').textContent = overdue; dashboard.querySelector('#deliveredCount').textContent = this.archivedOrders.length; },
+                renderNotesHistory: function(notes) { const historyContainer = document.getElementById('orderUpdateModal').querySelector('#customerNotesHistory'); if (!notes || notes.length === 0) { historyContainer.innerHTML = '<p style="text-align: center;">No notes yet.</p>'; return; } historyContainer.innerHTML = [...notes].reverse().map(note => { const formattedDate = new Date(note.timestamp).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' }); return `<div class="note-item"><p>${note.text}</p><small>${formattedDate}</small></div>`; }).join(''); },
+                openImageModal: function(orderId) { const order = this.orders.find(o => o.id === orderId); if (order && order.itemPictureUrl) { document.getElementById('fullSizeImage').src = order.itemPictureUrl; document.getElementById('imageModal').classList.add('show'); } },
+                closeModal: function(modalId) { const modal = document.getElementById(modalId); if (modal) modal.classList.remove('show'); }
+            };
+            Object.assign(orderApp, unchangedFunctions);
+        })();
 
     </script>
 </body>
