@@ -1484,374 +1484,29 @@
         // ===================================================================================
         const crmApp = {
             customers: [], dailyUpdates: [], charts: {}, modal: null,
-
-            init() {
-                this.modal = document.getElementById('crmUpdateModal');
-                this.showTab('add-customer', document.querySelector('#crmPortal .tab-button'));
-                this.loadAllDataFromServer();
-                this.setupEventListeners();
-            },
-            
-            async handleApiRequest(endpoint, body, successMessage) {
-                try {
-                    const response = await fetch(`/.netlify/functions/${endpoint}`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(body)
-                    });
-                    if (!response.ok) {
-                        const err = await response.json();
-                        throw new Error(err.message || 'Server request failed');
-                    }
-                    if(successMessage) showNotification(successMessage, true);
-                    return true;
-                } catch (error) {
-                    showNotification(`Error: ${error.message}`, false);
-                    return false;
-                }
-            },
-
-            async loadAllDataFromServer() {
-                try {
-                    const response = await fetch('/.netlify/functions/get-all-data'); 
-                    if (!response.ok) throw new Error('Server error!');
-                    const data = await response.json();
-                    
-                    this.customers = (data.customers || []).map(c => ({...c, id: c.id}));
-                    this.dailyUpdates = (data.dailyUpdates || []).map(u => ({...u, id: u.id}));
-                    
-                    this.customers.sort((a, b) => new Date(b.dateAdded) - new Date(a.dateAdded));
-                    this.dailyUpdates.sort((a, b) => new Date(b.date) - new Date(a.date));
-                    this.renderAll();
-                } catch (error) { showNotification("Could not load CRM data from the cloud.", false); }
-            },
-
-            setupEventListeners() {
-                document.getElementById('customerForm').addEventListener('submit', (e) => this.handleAddCustomer(e));
-                document.getElementById('dailyUpdateForm').addEventListener('submit', (e) => this.handleAddDailyUpdate(e));
-                document.getElementById('updateForm').addEventListener('submit', (e) => this.handleUpdateCustomer(e));
-                document.getElementById('historySearchInput').addEventListener('input', (e) => this.handleHistorySearchInput(e));
-                document.getElementById('dailyUpdateCustomerSearch').addEventListener('input', (e) => this.handleDailyUpdateSearchInput(e));
-                this.modal.addEventListener('click', (e) => { if (e.target === this.modal) this.closeModal(); });
-            },
-            
-            async handleAddCustomer(e) {
-                e.preventDefault();
-                const form = e.target;
-                const button = form.querySelector('button[type="submit"]');
-                toggleButtonLoading(button, true, button.innerHTML);
-                const newCustomer = {
-                    dateAdded: new Date().toISOString(),
-                    name: form.elements.customerName.value.trim(),
-                    phone: form.elements.phoneNumber.value.trim(),
-                    email: form.elements.email.value.trim(),
-                    location: form.elements.location.value.trim(),
-                    adSource: form.elements.adSource.value,
-                    interestedProduct: form.elements.interestedProduct.value.trim(),
-                    budget: form.elements.budget.value,
-                    leadStatus: form.elements.leadStatus.value,
-                    priority: form.elements.priority.value,
-                    nextFollowUp: form.elements.nextFollowUp.value,
-                    notes: [{ date: new Date().toISOString(), text: form.elements.initialResponse.value.trim() }]
-                };
-                if (await this.handleApiRequest('add-customer', newCustomer, 'Customer saved!')) {
-                    form.reset();
-                    await this.loadAllDataFromServer();
-                }
-                toggleButtonLoading(button, false, '<i class="fas fa-save"></i> Save Customer');
-            },
-
-            async handleAddDailyUpdate(e) {
-                e.preventDefault();
-                const form = e.target;
-                const button = form.querySelector('button[type="submit"]');
-                toggleButtonLoading(button, true, button.innerHTML);
-                
-                const customerId = document.getElementById('dailyUpdateCustomerId').value;
-                if (!customerId) {
-                    showNotification("Please select a valid customer from the list.", false);
-                    toggleButtonLoading(button, false, '<i class="fas fa-comment-medical"></i> Add Update');
-                    return;
-                }
-
-                const newUpdate = {
-                    date: new Date().toISOString(), 
-                    customerId: customerId,
-                    supportPerson: form.elements.supportPerson.value.trim(), 
-                    interactionType: form.elements.callStatus.value, 
-                    comment: form.elements.dailyComment.value.trim(),
-                };
-
-                const customer = this.customers.find(c => c.id === newUpdate.customerId);
-                if (customer) newUpdate.customerName = customer.name;
-
-                if (await this.handleApiRequest('add-daily-update', newUpdate, 'Update saved!')) {
-                    form.reset();
-                    document.getElementById('dailyUpdateCustomerId').value = '';
-                    await this.loadAllDataFromServer();
-                }
-                toggleButtonLoading(button, false, '<i class="fas fa-comment-medical"></i> Add Update');
-            },
-
-            async handleUpdateCustomer(e) {
-                e.preventDefault();
-                const form = e.target;
-                const button = form.querySelector('button[type="submit"]');
-                toggleButtonLoading(button, true, button.innerHTML);
-                const customerId = document.getElementById('updateCustomerIdModal').value;
-                const updatedData = {
-                    name: document.getElementById('updateName').value.trim(),
-                    phone: document.getElementById('updatePhone').value.trim(),
-                    email: document.getElementById('updateEmail').value.trim(),
-                    location: document.getElementById('updateLocation').value.trim(),
-                    leadStatus: document.getElementById('updateStatus').value,
-                    priority: document.getElementById('updatePriority').value,
-                    nextFollowUp: document.getElementById('updateFollowUp').value,
-                };
-                if (await this.handleApiRequest('update-customer', { id: customerId, data: updatedData }, 'Customer updated!')) {
-                    this.closeModal();
-                    await this.loadAllDataFromServer();
-                }
-                toggleButtonLoading(button, false, '<i class="fas fa-save"></i> Update Customer');
-            },
-
-            async handleDeleteCustomer(customerId) {
-                if (!confirm('Are you sure you want to delete this customer? This cannot be undone.')) return;
-                if (await this.handleApiRequest('delete-customer', { id: customerId }, 'Customer deleted.')) {
-                    await this.loadAllDataFromServer();
-                }
-            },
-
-            renderAll() {
-                const filtered = this.getFilteredCustomers();
-                this.displayCustomers(filtered);
-                this.displayDailyUpdates();
-                this.displayFollowUps();
-                this.populateDatalists();
-                this.updateAnalyticsDashboard(filtered);
-                if (document.querySelector('#analytics.tab-content.active')) { this.renderCharts(filtered); }
-            },
-            
-            getFilteredCustomers() {
-                const searchTerm = document.getElementById('searchInput').value.toLowerCase().trim();
-                const statusFilter = document.getElementById('statusFilter').value;
-                const productFilter = document.getElementById('productFilter').value.toLowerCase().trim();
-
-                return this.customers.filter(customer => {
-                    const matchesSearch = !searchTerm ? true :
-                        (customer.name && customer.name.toLowerCase().includes(searchTerm)) ||
-                        (customer.phone && customer.phone.includes(searchTerm));
-                    const matchesStatus = !statusFilter ? true : customer.leadStatus === statusFilter;
-                    const matchesProduct = !productFilter ? true :
-                        (customer.interestedProduct && customer.interestedProduct.toLowerCase().includes(productFilter));
-                    return matchesSearch && matchesStatus && matchesProduct;
-                });
-            },
-
-            displayCustomers(filteredCustomers) {
-                const tableBody = document.getElementById('customerTableBody');
-                document.getElementById('customerTableHeader').innerHTML = `<tr><th>Customer</th><th>Contact</th><th>Interest</th><th>Status</th><th>Next Follow-up</th><th>Actions</th></tr>`;
-                if (filteredCustomers.length === 0) { tableBody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 2rem;">No customers match filters.</td></tr>'; return; }
-                tableBody.innerHTML = filteredCustomers.map(cust => `
-                    <tr>
-                        <td data-label="Customer"><strong>${cust.name}</strong><br><small>${cust.location || 'N/A'}</small></td>
-                        <td data-label="Contact" class="contact-links">
-                            <a href="tel:${cust.phone}" class="phone-link"><i class="fas fa-phone"></i> Call</a>
-                            <a href="https://wa.me/${formatPhoneForWhatsApp(cust.phone)}" class="whatsapp-link" target="_blank"><i class="fab fa-whatsapp"></i> WhatsApp</a>
-                        </td>
-                        <td data-label="Interest">${cust.interestedProduct || 'N/A'}</td>
-                        <td data-label="Status">${cust.leadStatus}</td>
-                        <td data-label="Next Follow-up">${cust.nextFollowUp || 'N/A'}</td>
-                        <td data-label="Actions">
-                            <button class="btn btn-secondary" style="padding: 5px 10px;" onclick="crmApp.openUpdateModal('${cust.id}')"><i class="fas fa-edit"></i></button>
-                            <button class="btn btn-danger" style="padding: 5px 10px;" onclick="crmApp.handleDeleteCustomer('${cust.id}')"><i class="fas fa-trash"></i></button>
-                        </td>
-                    </tr>`).join('');
-            },
-            
-            displayDailyUpdates() {
-                const list = document.getElementById('dailyUpdatesList');
-                if (this.dailyUpdates.length === 0) { list.innerHTML = '<p style="text-align:center;">No recent updates.</p>'; return; }
-                list.innerHTML = this.dailyUpdates.slice(0, 25).map(update => {
-                    const customer = this.customers.find(c => c.id === update.customerId);
-                    const customerName = update.customerName || (customer ? customer.name : 'Unknown');
-                    const contactLinksHtml = customer ? `
-                        <div class="contact-links" style="justify-content: flex-start; margin-top: 0.5rem;">
-                            <a href="tel:${customer.phone}" class="phone-link"><i class="fas fa-phone"></i> Call</a>
-                            <a href="https://wa.me/${formatPhoneForWhatsApp(customer.phone)}" class="whatsapp-link" target="_blank"><i class="fab fa-whatsapp"></i> WhatsApp</a>
-                        </div>` : '';
-
-                    return `<div style="border-left: 3px solid var(--gold-primary); padding-left: 1rem; margin-bottom: 1rem;">
-                                <div style="display: flex; justify-content: space-between;">
-                                    <strong>${customerName}</strong>
-                                    <small>${new Date(update.date).toLocaleDateString()}</small>
-                                </div>
-                                <p><em>By: ${update.supportPerson} | ${update.interactionType}</em></p>
-                                <p>${update.comment}</p>
-                                ${contactLinksHtml}
-                            </div>`;
-                }).join('');
-            },
-
-            displayFollowUps() {
-                const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
-                const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
-                
-                const activeCustomers = this.customers.filter(c => c.leadStatus !== 'Converted' && c.leadStatus !== 'Not Interested');
-                const overdue = activeCustomers.filter(c => c.nextFollowUp && new Date(c.nextFollowUp) < todayStart);
-                const today = activeCustomers.filter(c => c.nextFollowUp && new Date(c.nextFollowUp) >= todayStart && new Date(c.nextFollowUp) <= todayEnd);
-                const upcoming = activeCustomers.filter(c => c.nextFollowUp && new Date(c.nextFollowUp) > todayEnd);
-                
-                const renderList = (custs, isOverdue = false) => {
-                    if (custs.length === 0) return `<p style="text-align: center;">None</p>`;
-                    return custs.map(c => `
-                        <div class="note-item">
-                            <div style="cursor:pointer;" onclick="crmApp.openUpdateModal('${c.id}')">
-                                <strong>${c.name}</strong><br>
-                                <small>Due: ${new Date(c.nextFollowUp).toLocaleDateString()}</small>
-                            </div>
-                            <div class="contact-links" style="justify-content: flex-start; margin-top: 0.5rem;">
-                               <a href="tel:${c.phone}" class="phone-link"><i class="fas fa-phone"></i> Call</a>
-                               <a href="https://wa.me/${formatPhoneForWhatsApp(c.phone)}" class="whatsapp-link" target="_blank"><i class="fab fa-whatsapp"></i> WhatsApp</a>
-                            </div>
-                        </div>`).join('');
-                };
-                document.getElementById('overdueFollowUps').innerHTML = renderList(overdue, true);
-                document.getElementById('todayFollowUps').innerHTML = renderList(today);
-                document.getElementById('upcomingFollowUps').innerHTML = renderList(upcoming);
-            },
-            
-            populateDatalists() {
-                const productList = document.getElementById('productList');
-                const historyCustomerList = document.getElementById('historyCustomerList');
-                const dailyUpdateCustomerList = document.getElementById('dailyUpdateCustomerList');
-
-                if(!this.customers || this.customers.length === 0) return;
-                
-                const uniqueProducts = [...new Set(this.customers.map(c => c.interestedProduct).filter(p => p))];
-                productList.innerHTML = uniqueProducts.map(p => `<option value="${p}"></option>`).join('');
-
-                const customerOptions = this.customers.map(customer => 
-                    `<option value="${customer.name} - ${customer.phone}" data-id="${customer.id}"></option>`
-                ).join('');
-                historyCustomerList.innerHTML = customerOptions;
-                dailyUpdateCustomerList.innerHTML = customerOptions;
-            },
-            
-            handleDailyUpdateSearchInput(event) {
-                const value = event.target.value;
-                const hiddenInput = document.getElementById('dailyUpdateCustomerId');
-                const options = document.getElementById('dailyUpdateCustomerList').options;
-                hiddenInput.value = ''; // Reset
-                for (let i = 0; i < options.length; i++) {
-                    if (options[i].value === value) {
-                        hiddenInput.value = options[i].getAttribute('data-id');
-                        break;
-                    }
-                }
-            },
-
-            handleHistorySearchInput(event) {
-                const value = event.target.value;
-                const options = document.getElementById('historyCustomerList').options;
-                for (let i = 0; i < options.length; i++) {
-                    if (options[i].value === value) {
-                        this.displayFullCustomerHistory(options[i].getAttribute('data-id'));
-                        break;
-                    }
-                }
-            },
-
-            searchAndDisplayHistory() {
-                const value = document.getElementById('historySearchInput').value;
-                const options = document.getElementById('historyCustomerList').options;
-                let customerId = null;
-                for (let i = 0; i < options.length; i++) {
-                    if (options[i].value === value) { customerId = options[i].getAttribute('data-id'); break; }
-                }
-                if (customerId) { this.displayFullCustomerHistory(customerId); } 
-                else { showNotification("Please select a valid customer.", false); }
-            },
-
-            displayFullCustomerHistory(customerId) {
-                const container = document.getElementById('customerHistoryLog');
-                if (!customerId) { container.style.display = 'none'; return; }
-                container.style.display = 'block';
-                const customer = this.customers.find(c => c.id === customerId);
-                const customerUpdates = this.dailyUpdates.filter(u => u.customerId === customerId);
-                const customerNotes = customer.notes || [];
-                const history = [...customerUpdates, ...customerNotes].sort((a,b) => new Date(b.date) - new Date(a.date));
-                if (history.length === 0) { container.innerHTML = '<p>No history recorded.</p>'; return; }
-                container.innerHTML = history.map(item => {
-                    const itemDate = new Date(item.date || item.timestamp).toLocaleString('en-IN');
-                    if (item.text) { 
-                        return `<div style="border-left: 3px solid #5bc0de; padding-left: 1rem; margin-bottom: 1rem;"><strong>Initial Note</strong> <small>(${itemDate})</small><p>${item.text}</p></div>`;
-                    } else {
-                        return `<div style="border-left: 3px solid var(--gold-primary); padding-left: 1rem; margin-bottom: 1rem;"><strong>Update by ${item.supportPerson}</strong> <small>(${itemDate})</small><p><em>Interaction: ${item.interactionType}</em></p><p>${item.comment}</p></div>`;
-                    }
-                }).join('');
-            },
-
-            updateAnalyticsDashboard(filteredCustomers) {
-                const dataSet = filteredCustomers || this.customers;
-                const total = dataSet.length;
-                const converted = dataSet.filter(c => c.leadStatus === 'Converted').length;
-                const today = new Date().toISOString().split('T')[0];
-                const todayUpdatesCount = this.dailyUpdates.filter(u => u.date.startsWith(today)).length;
-                const pendingFollowUps = dataSet.filter(c => c.nextFollowUp && new Date(c.nextFollowUp) < new Date()).length;
-                document.getElementById('totalLeads').textContent = total;
-                document.getElementById('conversionRate').textContent = total > 0 ? `${Math.round((converted/total)*100)}%` : '0%';
-                document.getElementById('todayUpdates').textContent = todayUpdatesCount;
-                document.getElementById('followUpPending').textContent = pendingFollowUps;
-                const sourceCounts = dataSet.reduce((acc, c) => { if (c.adSource) { acc[c.adSource] = (acc[c.adSource] || 0) + 1; } return acc; }, {});
-                const sourceDashboard = document.getElementById('sourceCountDashboard');
-                sourceDashboard.innerHTML = Object.keys(sourceCounts).map(source => `<div class="analytics-card"><h4>${sourceCounts[source]}</h4><p>${source}</p></div>`).join('');
-            },
-            
-            renderCharts(filteredCustomers) {
-                const dataSet = filteredCustomers || this.customers;
-                Object.values(this.charts).forEach(chart => { if (chart.destroy) chart.destroy(); });
-                const chartLabelColor = '#AAAAAA';
-                const statusCounts = dataSet.reduce((acc, c) => { acc[c.leadStatus] = (acc[c.leadStatus] || 0) + 1; return acc; }, {});
-                this.charts.status = new Chart(document.getElementById('statusChart').getContext('2d'), { type: 'doughnut', data: { labels: Object.keys(statusCounts), datasets: [{ data: Object.values(statusCounts), backgroundColor: ['#DCCA87', '#5bc0de', '#5cb85c', '#f0ad4e', '#d9534f', '#8a6de9'] }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: chartLabelColor } } } } });
-                const sourceCounts = dataSet.reduce((acc, c) => { acc[c.adSource] = (acc[c.adSource] || 0) + 1; return acc; }, {});
-                this.charts.source = new Chart(document.getElementById('sourceChart').getContext('2d'), { type: 'pie', data: { labels: Object.keys(sourceCounts), datasets: [{ data: Object.values(sourceCounts), backgroundColor: ['#DCCA87', '#AAAAAA', '#F5EFE1', '#5bc0de', '#5cb85c'] }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: chartLabelColor } } } } });
-            },
-
-            showTab(tabName, element) {
-                document.querySelectorAll('#crmPortal .tab-content').forEach(c => c.classList.remove('active'));
-                document.querySelectorAll('#crmPortal .tab-button').forEach(b => b.classList.remove('active'));
-                document.getElementById(tabName).classList.add('active');
-                element.classList.add('active');
-                if (tabName !== 'add-customer') { this.renderAll(); }
-            },
-
-            openUpdateModal(customerId) {
-                const customer = this.customers.find(c => c.id === customerId);
-                if (!customer) return;
-                const form = document.getElementById('updateForm');
-                form.elements.updateCustomerIdModal.value = customer.id; form.elements.updateName.value = customer.name; form.elements.updatePhone.value = customer.phone; form.elements.updateEmail.value = customer.email || ''; form.elements.updateLocation.value = customer.location || ''; form.elements.updateStatus.value = customer.leadStatus; form.elements.updatePriority.value = customer.priority; form.elements.updateFollowUp.value = customer.nextFollowUp || '';
-                this.displayCustomerHistoryInModal(customerId);
-                this.modal.classList.add('show');
-            },
-            
-            displayCustomerHistoryInModal(customerId) {
-                const container = document.getElementById('customerUpdateHistory');
-                const customer = this.customers.find(c => c.id === customerId);
-                const customerUpdates = this.dailyUpdates.filter(u => u.customerId === customerId);
-                const customerNotes = customer.notes || [];
-                const history = [...customerUpdates, ...customerNotes].sort((a,b) => new Date(b.date) - new Date(a.date));
-                if (history.length === 0) { container.innerHTML = '<p>No history for this customer.</p>'; return; }
-                container.innerHTML = history.slice(0, 5).map(item => {
-                    const itemDate = new Date(item.date || item.timestamp).toLocaleString('en-IN');
-                    if (item.text) {
-                        return `<div style="border-left: 3px solid #5bc0de; padding-left: 1rem; margin-bottom: 1rem;"><strong>Initial Note</strong> <small>(${itemDate})</small><p>${item.text}</p></div>`;
-                    } else {
-                        return `<div style="border-left: 3px solid var(--gold-primary); padding-left: 1rem; margin-bottom: 1rem;"><strong>Update by ${item.supportPerson}</strong> <small>(${itemDate})</small><p>${item.comment}</p></div>`;
-                    }
-                }).join('');
-            },
-
+            init() { this.modal = document.getElementById('crmUpdateModal'); this.showTab('add-customer', document.querySelector('#crmPortal .tab-button')); this.loadAllDataFromServer(); this.setupEventListeners(); },
+            async handleApiRequest(endpoint, body, successMessage) { try { const response = await fetch(`/.netlify/functions/${endpoint}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); if (!response.ok) { const err = await response.json(); throw new Error(err.message || 'Server request failed'); } if(successMessage) showNotification(successMessage, true); return true; } catch (error) { showNotification(`Error: ${error.message}`, false); return false; } },
+            async loadAllDataFromServer() { try { const response = await fetch('/.netlify/functions/get-all-data'); if (!response.ok) throw new Error('Server error!'); const data = await response.json(); this.customers = (data.customers || []).map(c => ({...c, id: c.id})); this.dailyUpdates = (data.dailyUpdates || []).map(u => ({...u, id: u.id})); this.customers.sort((a, b) => new Date(b.dateAdded) - new Date(a.dateAdded)); this.dailyUpdates.sort((a, b) => new Date(b.date) - new Date(a.date)); this.renderAll(); } catch (error) { showNotification("Could not load CRM data from the cloud.", false); } },
+            setupEventListeners() { document.getElementById('customerForm').addEventListener('submit', (e) => this.handleAddCustomer(e)); document.getElementById('dailyUpdateForm').addEventListener('submit', (e) => this.handleAddDailyUpdate(e)); document.getElementById('updateForm').addEventListener('submit', (e) => this.handleUpdateCustomer(e)); document.getElementById('historySearchInput').addEventListener('input', (e) => this.handleHistorySearchInput(e)); document.getElementById('dailyUpdateCustomerSearch').addEventListener('input', (e) => this.handleDailyUpdateSearchInput(e)); this.modal.addEventListener('click', (e) => { if (e.target === this.modal) this.closeModal(); }); },
+            async handleAddCustomer(e) { e.preventDefault(); const form = e.target; const button = form.querySelector('button[type="submit"]'); toggleButtonLoading(button, true, button.innerHTML); const newCustomer = { dateAdded: new Date().toISOString(), name: form.elements.customerName.value.trim(), phone: form.elements.phoneNumber.value.trim(), email: form.elements.email.value.trim(), location: form.elements.location.value.trim(), adSource: form.elements.adSource.value, interestedProduct: form.elements.interestedProduct.value.trim(), budget: form.elements.budget.value, leadStatus: form.elements.leadStatus.value, priority: form.elements.priority.value, nextFollowUp: form.elements.nextFollowUp.value, notes: [{ date: new Date().toISOString(), text: form.elements.initialResponse.value.trim() }] }; if (await this.handleApiRequest('add-customer', newCustomer, 'Customer saved!')) { form.reset(); await this.loadAllDataFromServer(); } toggleButtonLoading(button, false, '<i class="fas fa-save"></i> Save Customer'); },
+            async handleAddDailyUpdate(e) { e.preventDefault(); const form = e.target; const button = form.querySelector('button[type="submit"]'); toggleButtonLoading(button, true, button.innerHTML); const customerId = document.getElementById('dailyUpdateCustomerId').value; if (!customerId) { showNotification("Please select a valid customer from the list.", false); toggleButtonLoading(button, false, '<i class="fas fa-comment-medical"></i> Add Update'); return; } const newUpdate = { date: new Date().toISOString(), customerId: customerId, supportPerson: form.elements.supportPerson.value.trim(), interactionType: form.elements.callStatus.value, comment: form.elements.dailyComment.value.trim(), }; const customer = this.customers.find(c => c.id === newUpdate.customerId); if (customer) newUpdate.customerName = customer.name; if (await this.handleApiRequest('add-daily-update', newUpdate, 'Update saved!')) { form.reset(); document.getElementById('dailyUpdateCustomerId').value = ''; await this.loadAllDataFromServer(); } toggleButtonLoading(button, false, '<i class="fas fa-comment-medical"></i> Add Update'); },
+            async handleUpdateCustomer(e) { e.preventDefault(); const form = e.target; const button = form.querySelector('button[type="submit"]'); toggleButtonLoading(button, true, button.innerHTML); const customerId = document.getElementById('updateCustomerIdModal').value; const updatedData = { name: document.getElementById('updateName').value.trim(), phone: document.getElementById('updatePhone').value.trim(), email: document.getElementById('updateEmail').value.trim(), location: document.getElementById('updateLocation').value.trim(), leadStatus: document.getElementById('updateStatus').value, priority: document.getElementById('updatePriority').value, nextFollowUp: document.getElementById('updateFollowUp').value, }; if (await this.handleApiRequest('update-customer', { id: customerId, data: updatedData }, 'Customer updated!')) { this.closeModal(); await this.loadAllDataFromServer(); } toggleButtonLoading(button, false, '<i class="fas fa-save"></i> Update Customer'); },
+            async handleDeleteCustomer(customerId) { if (!confirm('Are you sure you want to delete this customer? This cannot be undone.')) return; if (await this.handleApiRequest('delete-customer', { id: customerId }, 'Customer deleted.')) { await this.loadAllDataFromServer(); } },
+            renderAll() { const filtered = this.getFilteredCustomers(); this.displayCustomers(filtered); this.displayDailyUpdates(); this.displayFollowUps(); this.populateDatalists(); this.updateAnalyticsDashboard(filtered); if (document.querySelector('#analytics.tab-content.active')) { this.renderCharts(filtered); } },
+            getFilteredCustomers() { const searchTerm = document.getElementById('searchInput').value.toLowerCase().trim(); const statusFilter = document.getElementById('statusFilter').value; const productFilter = document.getElementById('productFilter').value.toLowerCase().trim(); return this.customers.filter(customer => { const matchesSearch = !searchTerm ? true : (customer.name && customer.name.toLowerCase().includes(searchTerm)) || (customer.phone && customer.phone.includes(searchTerm)); const matchesStatus = !statusFilter ? true : customer.leadStatus === statusFilter; const matchesProduct = !productFilter ? true : (customer.interestedProduct && customer.interestedProduct.toLowerCase().includes(productFilter)); return matchesSearch && matchesStatus && matchesProduct; }); },
+            displayCustomers(filteredCustomers) { const tableBody = document.getElementById('customerTableBody'); document.getElementById('customerTableHeader').innerHTML = `<tr><th>Customer</th><th>Contact</th><th>Interest</th><th>Status</th><th>Next Follow-up</th><th>Actions</th></tr>`; if (filteredCustomers.length === 0) { tableBody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 2rem;">No customers match filters.</td></tr>'; return; } tableBody.innerHTML = filteredCustomers.map(cust => `<tr><td data-label="Customer"><strong>${cust.name}</strong><br><small>${cust.location || 'N/A'}</small></td><td data-label="Contact" class="contact-links"><a href="tel:${cust.phone}" class="phone-link"><i class="fas fa-phone"></i> Call</a><a href="https://wa.me/${formatPhoneForWhatsApp(cust.phone)}" class="whatsapp-link" target="_blank"><i class="fab fa-whatsapp"></i> WhatsApp</a></td><td data-label="Interest">${cust.interestedProduct || 'N/A'}</td><td data-label="Status">${cust.leadStatus}</td><td data-label="Next Follow-up">${cust.nextFollowUp || 'N/A'}</td><td data-label="Actions"><button class="btn btn-secondary" style="padding: 5px 10px;" onclick="crmApp.openUpdateModal('${cust.id}')"><i class="fas fa-edit"></i></button><button class="btn btn-danger" style="padding: 5px 10px;" onclick="crmApp.handleDeleteCustomer('${cust.id}')"><i class="fas fa-trash"></i></button></td></tr>`).join(''); },
+            displayDailyUpdates() { const list = document.getElementById('dailyUpdatesList'); if (this.dailyUpdates.length === 0) { list.innerHTML = '<p style="text-align:center;">No recent updates.</p>'; return; } list.innerHTML = this.dailyUpdates.slice(0, 25).map(update => { const customer = this.customers.find(c => c.id === update.customerId); const customerName = update.customerName || (customer ? customer.name : 'Unknown'); const contactLinksHtml = customer ? `<div class="contact-links" style="justify-content: flex-start; margin-top: 0.5rem;"><a href="tel:${customer.phone}" class="phone-link"><i class="fas fa-phone"></i> Call</a><a href="https://wa.me/${formatPhoneForWhatsApp(customer.phone)}" class="whatsapp-link" target="_blank"><i class="fab fa-whatsapp"></i> WhatsApp</a></div>` : ''; return `<div style="border-left: 3px solid var(--gold-primary); padding-left: 1rem; margin-bottom: 1rem;"><div style="display: flex; justify-content: space-between;"><strong>${customerName}</strong><small>${new Date(update.date).toLocaleDateString()}</small></div><p><em>By: ${update.supportPerson} | ${update.interactionType}</em></p><p>${update.comment}</p>${contactLinksHtml}</div>`; }).join(''); },
+            displayFollowUps() { const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0); const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999); const activeCustomers = this.customers.filter(c => c.leadStatus !== 'Converted' && c.leadStatus !== 'Not Interested'); const overdue = activeCustomers.filter(c => c.nextFollowUp && new Date(c.nextFollowUp) < todayStart); const today = activeCustomers.filter(c => c.nextFollowUp && new Date(c.nextFollowUp) >= todayStart && new Date(c.nextFollowUp) <= todayEnd); const upcoming = activeCustomers.filter(c => c.nextFollowUp && new Date(c.nextFollowUp) > todayEnd); const renderList = (custs, isOverdue = false) => { if (custs.length === 0) return `<p style="text-align: center;">None</p>`; return custs.map(c => `<div class="note-item"><div style="cursor:pointer;" onclick="crmApp.openUpdateModal('${c.id}')"><strong>${c.name}</strong><br><small>Due: ${new Date(c.nextFollowUp).toLocaleDateString()}</small></div><div class="contact-links" style="justify-content: flex-start; margin-top: 0.5rem;"><a href="tel:${c.phone}" class="phone-link"><i class="fas fa-phone"></i> Call</a><a href="https://wa.me/${formatPhoneForWhatsApp(c.phone)}" class="whatsapp-link" target="_blank"><i class="fab fa-whatsapp"></i> WhatsApp</a></div></div>`).join(''); }; document.getElementById('overdueFollowUps').innerHTML = renderList(overdue, true); document.getElementById('todayFollowUps').innerHTML = renderList(today); document.getElementById('upcomingFollowUps').innerHTML = renderList(upcoming); },
+            populateDatalists() { const productList = document.getElementById('productList'); const historyCustomerList = document.getElementById('historyCustomerList'); const dailyUpdateCustomerList = document.getElementById('dailyUpdateCustomerList'); if(!this.customers || this.customers.length === 0) return; const uniqueProducts = [...new Set(this.customers.map(c => c.interestedProduct).filter(p => p))]; productList.innerHTML = uniqueProducts.map(p => `<option value="${p}"></option>`).join(''); const customerOptions = this.customers.map(customer => `<option value="${customer.name} - ${customer.phone}" data-id="${customer.id}"></option>`).join(''); historyCustomerList.innerHTML = customerOptions; dailyUpdateCustomerList.innerHTML = customerOptions; },
+            handleDailyUpdateSearchInput(event) { const value = event.target.value; const hiddenInput = document.getElementById('dailyUpdateCustomerId'); const options = document.getElementById('dailyUpdateCustomerList').options; hiddenInput.value = ''; for (let i = 0; i < options.length; i++) { if (options[i].value === value) { hiddenInput.value = options[i].getAttribute('data-id'); break; } } },
+            handleHistorySearchInput(event) { const value = event.target.value; const options = document.getElementById('historyCustomerList').options; for (let i = 0; i < options.length; i++) { if (options[i].value === value) { this.displayFullCustomerHistory(options[i].getAttribute('data-id')); break; } } },
+            searchAndDisplayHistory() { const value = document.getElementById('historySearchInput').value; const options = document.getElementById('historyCustomerList').options; let customerId = null; for (let i = 0; i < options.length; i++) { if (options[i].value === value) { customerId = options[i].getAttribute('data-id'); break; } } if (customerId) { this.displayFullCustomerHistory(customerId); } else { showNotification("Please select a valid customer.", false); } },
+            displayFullCustomerHistory(customerId) { const container = document.getElementById('customerHistoryLog'); if (!customerId) { container.style.display = 'none'; return; } container.style.display = 'block'; const customer = this.customers.find(c => c.id === customerId); const customerUpdates = this.dailyUpdates.filter(u => u.customerId === customerId); const customerNotes = customer.notes || []; const history = [...customerUpdates, ...customerNotes].sort((a,b) => new Date(b.date) - new Date(a.date)); if (history.length === 0) { container.innerHTML = '<p>No history recorded.</p>'; return; } container.innerHTML = history.map(item => { const itemDate = new Date(item.date || item.timestamp).toLocaleString('en-IN'); if (item.text) { return `<div style="border-left: 3px solid #5bc0de; padding-left: 1rem; margin-bottom: 1rem;"><strong>Initial Note</strong> <small>(${itemDate})</small><p>${item.text}</p></div>`; } else { return `<div style="border-left: 3px solid var(--gold-primary); padding-left: 1rem; margin-bottom: 1rem;"><strong>Update by ${item.supportPerson}</strong> <small>(${itemDate})</small><p><em>Interaction: ${item.interactionType}</em></p><p>${item.comment}</p></div>`; } }).join(''); },
+            updateAnalyticsDashboard(filteredCustomers) { const dataSet = filteredCustomers || this.customers; const total = dataSet.length; const converted = dataSet.filter(c => c.leadStatus === 'Converted').length; const today = new Date().toISOString().split('T')[0]; const todayUpdatesCount = this.dailyUpdates.filter(u => u.date.startsWith(today)).length; const pendingFollowUps = dataSet.filter(c => c.nextFollowUp && new Date(c.nextFollowUp) < new Date()).length; document.getElementById('totalLeads').textContent = total; document.getElementById('conversionRate').textContent = total > 0 ? `${Math.round((converted/total)*100)}%` : '0%'; document.getElementById('todayUpdates').textContent = todayUpdatesCount; document.getElementById('followUpPending').textContent = pendingFollowUps; const sourceCounts = dataSet.reduce((acc, c) => { if (c.adSource) { acc[c.adSource] = (acc[c.adSource] || 0) + 1; } return acc; }, {}); const sourceDashboard = document.getElementById('sourceCountDashboard'); sourceDashboard.innerHTML = Object.keys(sourceCounts).map(source => `<div class="analytics-card"><h4>${sourceCounts[source]}</h4><p>${source}</p></div>`).join(''); },
+            renderCharts(filteredCustomers) { const dataSet = filteredCustomers || this.customers; Object.values(this.charts).forEach(chart => { if (chart.destroy) chart.destroy(); }); const chartLabelColor = '#AAAAAA'; const statusCounts = dataSet.reduce((acc, c) => { acc[c.leadStatus] = (acc[c.leadStatus] || 0) + 1; return acc; }, {}); this.charts.status = new Chart(document.getElementById('statusChart').getContext('2d'), { type: 'doughnut', data: { labels: Object.keys(statusCounts), datasets: [{ data: Object.values(statusCounts), backgroundColor: ['#DCCA87', '#5bc0de', '#5cb85c', '#f0ad4e', '#d9534f', '#8a6de9'] }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: chartLabelColor } } } } }); const sourceCounts = dataSet.reduce((acc, c) => { acc[c.adSource] = (acc[c.adSource] || 0) + 1; return acc; }, {}); this.charts.source = new Chart(document.getElementById('sourceChart').getContext('2d'), { type: 'pie', data: { labels: Object.keys(sourceCounts), datasets: [{ data: Object.values(sourceCounts), backgroundColor: ['#DCCA87', '#AAAAAA', '#F5EFE1', '#5bc0de', '#5cb85c'] }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: chartLabelColor } } } } }); },
+            showTab(tabName, element) { document.querySelectorAll('#crmPortal .tab-content').forEach(c => c.classList.remove('active')); document.querySelectorAll('#crmPortal .tab-button').forEach(b => b.classList.remove('active')); document.getElementById(tabName).classList.add('active'); element.classList.add('active'); if (tabName !== 'add-customer') { this.renderAll(); } },
+            openUpdateModal(customerId) { const customer = this.customers.find(c => c.id === customerId); if (!customer) return; const form = document.getElementById('updateForm'); form.elements.updateCustomerIdModal.value = customer.id; form.elements.updateName.value = customer.name; form.elements.updatePhone.value = customer.phone; form.elements.updateEmail.value = customer.email || ''; form.elements.updateLocation.value = customer.location || ''; form.elements.updateStatus.value = customer.leadStatus; form.elements.updatePriority.value = customer.priority; form.elements.updateFollowUp.value = customer.nextFollowUp || ''; this.displayCustomerHistoryInModal(customerId); this.modal.classList.add('show'); },
+            displayCustomerHistoryInModal(customerId) { const container = document.getElementById('customerUpdateHistory'); const customer = this.customers.find(c => c.id === customerId); const customerUpdates = this.dailyUpdates.filter(u => u.customerId === customerId); const customerNotes = customer.notes || []; const history = [...customerUpdates, ...customerNotes].sort((a,b) => new Date(b.date) - new Date(a.date)); if (history.length === 0) { container.innerHTML = '<p>No history for this customer.</p>'; return; } container.innerHTML = history.slice(0, 5).map(item => { const itemDate = new Date(item.date || item.timestamp).toLocaleString('en-IN'); if (item.text) { return `<div style="border-left: 3px solid #5bc0de; padding-left: 1rem; margin-bottom: 1rem;"><strong>Initial Note</strong> <small>(${itemDate})</small><p>${item.text}</p></div>`; } else { return `<div style="border-left: 3px solid var(--gold-primary); padding-left: 1rem; margin-bottom: 1rem;"><strong>Update by ${item.supportPerson}</strong> <small>(${itemDate})</small><p>${item.comment}</p></div>`; } }).join(''); },
             closeModal() { this.modal.classList.remove('show'); }
         };
 
@@ -1883,13 +1538,14 @@
                     
                     let loadedOrders = (data.orders || []).map(o => ({...o, id: o.id }));
                     
+                    // *** FIX: On-the-fly data migration for old orders ***
                     loadedOrders.forEach(order => {
                         if (!order.items && order.itemName) {
                             order.items = [{
                                 name: order.itemName,
                                 weight: order.weight || '',
                                 workerName: order.workerName || 'Unassigned',
-                                status: order.status || 'Pending' 
+                                status: order.status || 'Pending' // CRITICAL FIX: Changed o.status to order.status
                             }];
                         }
                     });
@@ -2300,9 +1956,10 @@
             
             openImageModal(orderId) { 
                 const order = this.orders.find(o => o.id === orderId); 
-                if (order && order.itemPictureUrls && order.itemPictureUrls.length > 0) {
+                const imageUrls = (order.itemPictureUrls && order.itemPictureUrls.length > 0) ? order.itemPictureUrls : (order.itemPictureUrl ? [order.itemPictureUrl] : []);
+                if (imageUrls.length > 0) {
                     const container = document.getElementById('fullSizeImageContainer');
-                    container.innerHTML = order.itemPictureUrls.map(url => `<img src="${url}" alt="Full Size Order Image">`).join('');
+                    container.innerHTML = imageUrls.map(url => `<img src="${url}" alt="Full Size Order Image">`).join('');
                     document.getElementById('imageModal').classList.add('show');
                 }
             },
