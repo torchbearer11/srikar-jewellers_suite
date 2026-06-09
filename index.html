@@ -969,7 +969,7 @@
                 <h2>Sale Entries</h2>
                 <p>Record Sales & View PDF Reports</p>
             </div>
-            <div class="portal-card" onclick="checkStockPassword()">
+            <div class="portal-card" onclick="showPortal('stock')">
                 <i class="fas fa-boxes-stacked"></i>
                 <h2>Stock Management</h2>
                 <p>Manage Box Weights & Watermarks</p>
@@ -1126,44 +1126,7 @@
         </div>
     </div>
 
-    <!-- Password Verification Modal -->
-    <div id="stockPasswordModal" class="modal-premium">
-        <div class="modal-content" style="max-width: 400px; text-align: center;">
-            <h2 class="section-title" style="margin-bottom: 1rem;">Stock Authorization</h2>
-            <p style="margin-bottom: 1.5rem; color: var(--text-secondary);">Enter custom password to access Stock Management.</p>
-            <form id="stockPasswordForm" onsubmit="event.preventDefault(); verifyStockPassword();">
-                <div class="form-group" style="margin-bottom: 1.5rem;">
-                    <label for="stockPasswordInput">Password</label>
-                    <input type="password" id="stockPasswordInput" placeholder="••••••••" required>
-                </div>
-                <div style="display: flex; gap: 1rem; justify-content: center;">
-                    <button type="submit" class="btn btn-primary">Authorize</button>
-                    <button type="button" class="btn btn-secondary" onclick="closePasswordModal()">Cancel</button>
-                </div>
-            </form>
-        </div>
-    </div>
 
-    <!-- Change Password Modal -->
-    <div id="changePasswordModal" class="modal-premium">
-        <div class="modal-content" style="max-width: 450px;">
-            <h2 class="section-title" style="margin-bottom: 1.5rem;">Change Password</h2>
-            <form id="changePasswordForm" onsubmit="event.preventDefault(); handlePasswordChange();">
-                <div class="form-group" style="margin-bottom: 1rem;">
-                    <label for="currentPasswordInput">Current Password</label>
-                    <input type="password" id="currentPasswordInput" required>
-                </div>
-                <div class="form-group" style="margin-bottom: 1.5rem;">
-                    <label for="newPasswordInput">New Password</label>
-                    <input type="password" id="newPasswordInput" required>
-                </div>
-                <div style="display: flex; gap: 1rem; justify-content: center;">
-                    <button type="submit" class="btn btn-primary">Update Password</button>
-                    <button type="button" class="btn btn-secondary" onclick="closeChangePasswordModal()">Cancel</button>
-                </div>
-            </form>
-        </div>
-    </div>
 
     <!-- Sale Entry Portal -->
     <div id="salePortal" class="app-portal">
@@ -1320,7 +1283,6 @@
             <div id="stock-current-stock" class="tab-content">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 2rem; flex-wrap:wrap; gap: 1rem;">
                     <h2 class="section-title" style="margin-bottom:0;">Live Stock Inventory</h2>
-                    <button class="btn btn-secondary" onclick="openChangePasswordModal()"><i class="fas fa-key"></i> Change Password</button>
                 </div>
                 
                 <div class="table-container">
@@ -1979,26 +1941,30 @@
             },
 
             async loadAllData() {
+                // Load sales data
                 try {
-                    const [salesResp, staffResp] = await Promise.all([
-                        fetch('/.netlify/functions/get-sales-data'),
-                        fetch('/.netlify/functions/get-order-data')
-                    ]);
-                    
-                    if (!salesResp.ok) throw new Error("Failed to load sales data");
-                    const salesData = await salesResp.json();
-                    this.sales = (salesData.sales || []).map(s => ({...s, id: s.id}));
-                    this.sales.sort((a, b) => new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date));
+                    const salesResp = await fetch('/.netlify/functions/get-sales-data');
+                    if (salesResp.ok) {
+                        const salesData = await salesResp.json();
+                        this.sales = (salesData.sales || []).map(s => ({...s, id: s.id}));
+                        this.sales.sort((a, b) => new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date));
+                    }
+                } catch (error) {
+                    console.error("Error loading sales data:", error);
+                }
 
+                // Load staff data
+                try {
+                    const staffResp = await fetch('/.netlify/functions/get-order-data');
                     if (staffResp.ok) {
                         const staffData = await staffResp.json();
                         this.staff = (staffData.staff || []).map(s => ({...s, id: s.id}));
                     }
-                    
-                    this.renderAll();
                 } catch (error) {
-                    showNotification(`Error: ${error.message}`, false);
+                    console.error("Error loading staff data:", error);
                 }
+                
+                this.renderAll();
             },
 
             showTab(tabName, element) {
@@ -2195,26 +2161,30 @@
             },
             
             async loadAllData() {
+                // Load stock data
                 try {
-                    const [stockResp, salesResp] = await Promise.all([
-                        fetch('/.netlify/functions/get-stock-data'),
-                        fetch('/.netlify/functions/get-sales-data')
-                    ]);
-                    
-                    if (!stockResp.ok) throw new Error("Failed to load stock data");
-                    if (!salesResp.ok) throw new Error("Failed to load sales data");
-                    
-                    const stockData = await stockResp.json();
-                    const salesData = await salesResp.json();
-                    
-                    this.stock = (stockData.stock || []).map(b => ({...b, id: b.id}));
-                    this.sales = (salesData.sales || []).map(s => ({...s, id: s.id}));
-                    
-                    this.stock.sort((a, b) => a.boxNo - b.boxNo);
-                    this.renderAll();
+                    const stockResp = await fetch('/.netlify/functions/get-stock-data');
+                    if (stockResp.ok) {
+                        const stockData = await stockResp.json();
+                        this.stock = (stockData.stock || []).map(b => ({...b, id: b.id}));
+                        this.stock.sort((a, b) => a.boxNo - b.boxNo);
+                    }
                 } catch (error) {
-                    showNotification(`Error: ${error.message}`, false);
+                    console.error("Error loading stock data:", error);
                 }
+
+                // Load sales data
+                try {
+                    const salesResp = await fetch('/.netlify/functions/get-sales-data');
+                    if (salesResp.ok) {
+                        const salesData = await salesResp.json();
+                        this.sales = (salesData.sales || []).map(s => ({...s, id: s.id}));
+                    }
+                } catch (error) {
+                    console.error("Error loading sales for stock:", error);
+                }
+                
+                this.renderAll();
             },
             
             showTab(tabName, element) {
@@ -2328,101 +2298,7 @@
             }
         };
 
-        // ===================================================================================
-        // ============================= SECURE AUTHORIZATION ===============================
-        // ===================================================================================
-        async function verifyStockPassword() {
-            const password = document.getElementById('stockPasswordInput').value;
-            const submitBtn = document.querySelector('#stockPasswordForm button[type="submit"]');
-            toggleButtonLoading(submitBtn, true);
-            
-            try {
-                const response = await fetch('/.netlify/functions/verify-password', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ password })
-                });
-                
-                if (response.ok) {
-                    sessionStorage.setItem('stock_authorized', 'true');
-                    closePasswordModal();
-                    showNotification("Authorized successfully!", true);
-                    showPortal('stock');
-                } else {
-                    showNotification("Incorrect password. Access denied.", false);
-                }
-            } catch (error) {
-                showNotification(`Authorization error: ${error.message}`, false);
-            } finally {
-                toggleButtonLoading(submitBtn, false, 'Authorize');
-            }
-        }
-        
-        function closePasswordModal() {
-            document.getElementById('stockPasswordModal').classList.remove('show');
-        }
-        
-        function openChangePasswordModal() {
-            document.getElementById('currentPasswordInput').value = '';
-            document.getElementById('newPasswordInput').value = '';
-            document.getElementById('changePasswordModal').classList.add('show');
-        }
-        
-        function closeChangePasswordModal() {
-            document.getElementById('changePasswordModal').classList.remove('show');
-        }
-        
-        async function handlePasswordChange() {
-            const currentPassword = document.getElementById('currentPasswordInput').value;
-            const newPassword = document.getElementById('newPasswordInput').value;
-            const submitBtn = document.querySelector('#changePasswordForm button[type="submit"]');
-            
-            toggleButtonLoading(submitBtn, true);
-            
-            try {
-                const response = await fetch('/.netlify/functions/change-password', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ currentPassword, newPassword })
-                });
-                
-                const data = await response.json();
-                if (response.ok && data.success) {
-                    closeChangePasswordModal();
-                    showNotification("Password changed successfully!", true);
-                } else {
-                    showNotification(data.message || "Failed to change password.", false);
-                }
-            } catch (error) {
-                showNotification(`Error: ${error.message}`, false);
-            } finally {
-                toggleButtonLoading(submitBtn, false, 'Update Password');
-            }
-        }
-        
-        function checkStockPassword() {
-            if (sessionStorage.getItem('stock_authorized') === 'true') {
-                showPortal('stock');
-            } else {
-                document.getElementById('stockPasswordInput').value = '';
-                document.getElementById('stockPasswordModal').classList.add('show');
-            }
-        }
-        
-        document.getElementById('stockPasswordModal').addEventListener('click', (e) => {
-            if (e.target.id === 'stockPasswordModal') closePasswordModal();
-        });
-        document.getElementById('changePasswordModal').addEventListener('click', (e) => {
-            if (e.target.id === 'changePasswordModal') closeChangePasswordModal();
-        });
-        
         // Expose functions globally for event handlers
-        window.verifyStockPassword = verifyStockPassword;
-        window.closePasswordModal = closePasswordModal;
-        window.openChangePasswordModal = openChangePasswordModal;
-        window.closeChangePasswordModal = closeChangePasswordModal;
-        window.handlePasswordChange = handlePasswordChange;
-        window.checkStockPassword = checkStockPassword;
         window.saleApp = saleApp;
         window.stockApp = stockApp;
         
