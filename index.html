@@ -1264,6 +1264,10 @@
                                 <small id="boxNoMessage" style="color: var(--gold-primary); margin-top: 0.3rem; display:none;"></small>
                             </div>
                             <div class="form-group">
+                                <label for="boxNameInput">Box Name *</label>
+                                <input type="text" id="boxNameInput" required placeholder="e.g. Bangles / Rings">
+                            </div>
+                            <div class="form-group">
                                 <label id="totalWeightLabel" for="totalWeightInput">Total Weight (g) *</label>
                                 <input type="number" id="totalWeightInput" step="0.001" required min="0" placeholder="Weight with jewelry">
                                 <small style="color: var(--text-secondary); margin-top: 0.3rem;">Watermark weight shown if sales exist.</small>
@@ -1290,6 +1294,7 @@
                         <thead>
                             <tr>
                                 <th>Box Number</th>
+                                <th>Box Name</th>
                                 <th>Manual Total Weight</th>
                                 <th>Box (Tare) Weight</th>
                                 <th>Updated Weight (Watermark)</th>
@@ -1297,7 +1302,7 @@
                             </tr>
                         </thead>
                         <tbody id="stockTableBody">
-                            <tr><td colspan="5" style="text-align:center; padding: 2rem;">No boxes registered.</td></tr>
+                            <tr><td colspan="6" style="text-align:center; padding: 2rem;">No boxes registered.</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -2217,6 +2222,7 @@
             handleBoxNoInput(val) {
                 const boxNo = parseInt(val);
                 const msgEl = document.getElementById('boxNoMessage');
+                const boxNameInput = document.getElementById('boxNameInput');
                 const totalWeightInput = document.getElementById('totalWeightInput');
                 const boxWeightInput = document.getElementById('boxWeightInput');
                 
@@ -2232,10 +2238,12 @@
                     msgEl.textContent = `Box ${boxNo} already exists. Editing will update its manual baseline.`;
                     msgEl.style.display = 'block';
                     
+                    boxNameInput.value = existing.boxName || '';
                     boxWeightInput.value = existing.boxWeight;
                     totalWeightInput.placeholder = `Watermark: ${watermark.toFixed(3)}g (Last: ${existing.totalWeight.toFixed(3)}g)`;
                 } else {
                     msgEl.style.display = 'none';
+                    boxNameInput.value = '';
                     totalWeightInput.placeholder = "Weight with jewelry";
                 }
             },
@@ -2248,6 +2256,7 @@
                 
                 const boxData = {
                     boxNo: parseInt(form.elements.boxNoInput.value),
+                    boxName: form.elements.boxNameInput.value.trim(),
                     totalWeight: parseFloat(form.elements.totalWeightInput.value),
                     boxWeight: parseFloat(form.elements.boxWeightInput.value)
                 };
@@ -2277,7 +2286,7 @@
                 const tableBody = document.getElementById('stockTableBody');
                 
                 if (this.stock.length === 0) {
-                    tableBody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 2rem;">No boxes registered.</td></tr>';
+                    tableBody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 2rem;">No boxes registered.</td></tr>';
                     return;
                 }
                 
@@ -2288,6 +2297,7 @@
                     return `
                         <tr>
                             <td>Box ${box.boxNo}</td>
+                            <td>${box.boxName || 'N/A'}</td>
                             <td>${box.totalWeight.toFixed(3)}g</td>
                             <td>${box.boxWeight.toFixed(3)}g</td>
                             <td><strong style="color: var(--gold-primary); font-size: 1.1rem;">${watermarkWeight.toFixed(3)}g</strong></td>
