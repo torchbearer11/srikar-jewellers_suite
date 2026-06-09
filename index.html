@@ -825,6 +825,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js"></script>
     <style>
         :root {--gold-primary: #DCCA87;--gold-secondary: #F5EFE1;--dark-bg: #0C0C0C;--dark-secondary: #181818;--text-primary: #FFFFFF;--text-secondary: #AAAAAA;--danger-red: #d9534f; --transition-fast: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); --status-pending: #f0ad4e; --status-progress: #5bc0de; --status-completed: #5cb85c; --status-delivered: #8a6de9;}
         * {margin: 0;padding: 0;box-sizing: border-box;}
@@ -961,6 +963,16 @@
                 <i class="fas fa-id-card"></i>
                 <h2>Staff Management</h2>
                 <p>Add or Remove Staff Members</p>
+            </div>
+            <div class="portal-card" onclick="showPortal('sale')">
+                <i class="fas fa-receipt"></i>
+                <h2>Sale Entries</h2>
+                <p>Record Sales & View PDF Reports</p>
+            </div>
+            <div class="portal-card" onclick="checkStockPassword()">
+                <i class="fas fa-boxes-stacked"></i>
+                <h2>Stock Management</h2>
+                <p>Manage Box Weights & Watermarks</p>
             </div>
         </div>
     </div>
@@ -1113,6 +1125,223 @@
             </div>
         </div>
     </div>
+
+    <!-- Password Verification Modal -->
+    <div id="stockPasswordModal" class="modal-premium">
+        <div class="modal-content" style="max-width: 400px; text-align: center;">
+            <h2 class="section-title" style="margin-bottom: 1rem;">Stock Authorization</h2>
+            <p style="margin-bottom: 1.5rem; color: var(--text-secondary);">Enter custom password to access Stock Management.</p>
+            <form id="stockPasswordForm" onsubmit="event.preventDefault(); verifyStockPassword();">
+                <div class="form-group" style="margin-bottom: 1.5rem;">
+                    <label for="stockPasswordInput">Password</label>
+                    <input type="password" id="stockPasswordInput" placeholder="••••••••" required>
+                </div>
+                <div style="display: flex; gap: 1rem; justify-content: center;">
+                    <button type="submit" class="btn btn-primary">Authorize</button>
+                    <button type="button" class="btn btn-secondary" onclick="closePasswordModal()">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Change Password Modal -->
+    <div id="changePasswordModal" class="modal-premium">
+        <div class="modal-content" style="max-width: 450px;">
+            <h2 class="section-title" style="margin-bottom: 1.5rem;">Change Password</h2>
+            <form id="changePasswordForm" onsubmit="event.preventDefault(); handlePasswordChange();">
+                <div class="form-group" style="margin-bottom: 1rem;">
+                    <label for="currentPasswordInput">Current Password</label>
+                    <input type="password" id="currentPasswordInput" required>
+                </div>
+                <div class="form-group" style="margin-bottom: 1.5rem;">
+                    <label for="newPasswordInput">New Password</label>
+                    <input type="password" id="newPasswordInput" required>
+                </div>
+                <div style="display: flex; gap: 1rem; justify-content: center;">
+                    <button type="submit" class="btn btn-primary">Update Password</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeChangePasswordModal()">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Sale Entry Portal -->
+    <div id="salePortal" class="app-portal">
+        <div class="container">
+            <header class="header">
+                <div class="header-text"><h1>Sale Entries & Reports</h1><p>Professional Sales Registry & Reporting</p></div>
+                <div class="logo-container"><img src="logo.jpeg" alt="Logo" class="logo"></div>
+                <button class="btn btn-secondary" onclick="showPortalSelection()"><i class="fas fa-home"></i> Main Menu</button>
+            </header>
+            <div class="nav-tabs">
+                <button class="tab-button active" onclick="saleApp.showTab('new-sale', this)"><i class="fas fa-plus-circle"></i> New Sale</button>
+                <button class="tab-button" onclick="saleApp.showTab('sales-reports', this)"><i class="fas fa-chart-line"></i> Sales Reports</button>
+            </div>
+            
+            <div id="sale-new-sale" class="tab-content active">
+                <h2 class="section-title">Record New Sale Entry</h2>
+                <div class="premium-card">
+                    <form id="newSaleForm" onsubmit="saleApp.handleNewSaleSubmit(event)">
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="saleBoxNo">Box Number *</label>
+                                <input type="number" id="saleBoxNo" required min="1" placeholder="Enter Box No.">
+                            </div>
+                            <div class="form-group">
+                                <label for="saleGrossWeight">Gross Weight (g) *</label>
+                                <input type="number" id="saleGrossWeight" step="0.001" required min="0" placeholder="e.g. 15.550">
+                            </div>
+                            <div class="form-group">
+                                <label for="saleNetWeight">Net Weight (g) *</label>
+                                <input type="number" id="saleNetWeight" step="0.001" required min="0" placeholder="e.g. 14.200">
+                            </div>
+                            <div class="form-group">
+                                <label for="saleSalesPerson">Sales Person *</label>
+                                <select id="saleSalesPerson" required>
+                                    <option value="">Select Staff</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="saleDate">Date *</label>
+                                <input type="date" id="saleDate" required>
+                            </div>
+                        </div>
+                        <div style="text-align: center; margin-top: 2rem;">
+                            <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save Sale Entry</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            
+            <div id="sale-sales-reports" class="tab-content">
+                <h2 class="section-title">Sales History & Reports</h2>
+                <div class="premium-card">
+                    <div class="filter-grid">
+                        <div class="form-group">
+                            <label for="filterStaff">Filter by Staff</label>
+                            <select id="filterStaff" onchange="saleApp.renderSales()">
+                                <option value="all">All Staff</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="filterStartDate">Start Date</label>
+                            <input type="date" id="filterStartDate" onchange="saleApp.renderSales()">
+                        </div>
+                        <div class="form-group">
+                            <label for="filterEndDate">End Date</label>
+                            <input type="date" id="filterEndDate" onchange="saleApp.renderSales()">
+                        </div>
+                        <div class="form-group">
+                            <label for="filterBoxNo">Filter by Box No.</label>
+                            <input type="number" id="filterBoxNo" placeholder="Box No." oninput="saleApp.renderSales()">
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="analytics-dashboard">
+                    <div class="analytics-card" style="border-left-color: #5cb85c;">
+                        <h3 id="reportTotalSales">0</h3>
+                        <p>Total Sales Count</p>
+                    </div>
+                    <div class="analytics-card" style="border-left-color: #5bc0de;">
+                        <h3 id="reportTotalGross">0g</h3>
+                        <p>Total Gross Weight</p>
+                    </div>
+                    <div class="analytics-card" style="border-left-color: #DCCA87;">
+                        <h3 id="reportTotalNet">0g</h3>
+                        <p>Total Net Weight</p>
+                    </div>
+                </div>
+                
+                <div style="margin-bottom: 1.5rem; text-align: right;">
+                    <button class="btn btn-secondary" onclick="saleApp.exportPDF()"><i class="fas fa-file-pdf"></i> Download PDF Report</button>
+                </div>
+                
+                <div class="table-container">
+                    <table class="premium-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Box No.</th>
+                                <th>Gross Weight (g)</th>
+                                <th>Net Weight (g)</th>
+                                <th>Sales Person</th>
+                            </tr>
+                        </thead>
+                        <tbody id="salesTableBody">
+                            <tr><td colspan="5" style="text-align:center; padding: 2rem;">No sale entries recorded.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stock Management Portal -->
+    <div id="stockPortal" class="app-portal">
+        <div class="container">
+            <header class="header">
+                <div class="header-text"><h1>Stock Management</h1><p>Secure Box Weights & Inventory Tracking</p></div>
+                <div class="logo-container"><img src="logo.jpeg" alt="Logo" class="logo"></div>
+                <button class="btn btn-secondary" onclick="showPortalSelection()"><i class="fas fa-home"></i> Main Menu</button>
+            </header>
+            <div class="nav-tabs">
+                <button class="tab-button active" onclick="stockApp.showTab('box-registry', this)"><i class="fas fa-box-open"></i> Register Box</button>
+                <button class="tab-button" onclick="stockApp.showTab('current-stock', this)"><i class="fas fa-boxes-stacked"></i> Current Stock</button>
+            </div>
+            
+            <div id="stock-box-registry" class="tab-content active">
+                <h2 class="section-title">Add / Update Box Weight</h2>
+                <div class="premium-card">
+                    <form id="boxRegistryForm" onsubmit="stockApp.handleBoxSaveSubmit(event)">
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="boxNoInput">Box Number *</label>
+                                <input type="number" id="boxNoInput" required min="1" placeholder="e.g. 1" oninput="stockApp.handleBoxNoInput(this.value)">
+                                <small id="boxNoMessage" style="color: var(--gold-primary); margin-top: 0.3rem; display:none;"></small>
+                            </div>
+                            <div class="form-group">
+                                <label id="totalWeightLabel" for="totalWeightInput">Total Weight (g) *</label>
+                                <input type="number" id="totalWeightInput" step="0.001" required min="0" placeholder="Weight with jewelry">
+                                <small style="color: var(--text-secondary); margin-top: 0.3rem;">Watermark weight shown if sales exist.</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="boxWeightInput">Box Weight (Tare g) *</label>
+                                <input type="number" id="boxWeightInput" step="0.001" required min="0" placeholder="Empty box weight">
+                            </div>
+                        </div>
+                        <div style="text-align: center; margin-top: 2rem;">
+                            <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save Box Weight</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            
+            <div id="stock-current-stock" class="tab-content">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 2rem; flex-wrap:wrap; gap: 1rem;">
+                    <h2 class="section-title" style="margin-bottom:0;">Live Stock Inventory</h2>
+                    <button class="btn btn-secondary" onclick="openChangePasswordModal()"><i class="fas fa-key"></i> Change Password</button>
+                </div>
+                
+                <div class="table-container">
+                    <table class="premium-table">
+                        <thead>
+                            <tr>
+                                <th>Box Number</th>
+                                <th>Manual Total Weight</th>
+                                <th>Box (Tare) Weight</th>
+                                <th>Updated Weight (Watermark)</th>
+                                <th>Net Gold/Jewelry Weight</th>
+                            </tr>
+                        </thead>
+                        <tbody id="stockTableBody">
+                            <tr><td colspan="5" style="text-align:center; padding: 2rem;">No boxes registered.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
     
     <script>
         // === GLOBAL UTILITIES (Shared by all apps) ===
@@ -1146,16 +1375,22 @@
         const crmPortal = document.getElementById('crmPortal');
         const orderPortal = document.getElementById('orderPortal');
         const staffPortal = document.getElementById('staffPortal');
+        const salePortal = document.getElementById('salePortal');
+        const stockPortal = document.getElementById('stockPortal');
         
         let isCrmInitialized = false;
         let isOrderInitialized = false;
         let isStaffInitialized = false;
+        let isSaleInitialized = false;
+        let isStockInitialized = false;
 
         function showPortal(portalName) {
             portalSelectionScreen.style.display = 'none';
             crmPortal.style.display = 'none';
             orderPortal.style.display = 'none';
             staffPortal.style.display = 'none';
+            if (salePortal) salePortal.style.display = 'none';
+            if (stockPortal) stockPortal.style.display = 'none';
 
             if (portalName === 'crm') {
                 crmPortal.style.display = 'block';
@@ -1171,6 +1406,12 @@
                 } else {
                     orderApp.renderStaffList();
                 }
+            } else if (portalName === 'sale') {
+                salePortal.style.display = 'block';
+                if (!isSaleInitialized) { saleApp.init(); isSaleInitialized = true; }
+            } else if (portalName === 'stock') {
+                stockPortal.style.display = 'block';
+                if (!isStockInitialized) { stockApp.init(); isStockInitialized = true; }
             }
         }
 
@@ -1178,6 +1419,8 @@
             crmPortal.style.display = 'none';
             orderPortal.style.display = 'none';
             staffPortal.style.display = 'none';
+            if (salePortal) salePortal.style.display = 'none';
+            if (stockPortal) stockPortal.style.display = 'none';
             portalSelectionScreen.style.display = 'flex';
         }
 
@@ -1722,6 +1965,470 @@
             
             closeModal(modalId) { const modal = document.getElementById(modalId); if (modal) modal.classList.remove('show'); }
         };
+
+        // ===================================================================================
+        // ============================ SALE ENTRIES & REPORTS ==============================
+        // ===================================================================================
+        const saleApp = {
+            sales: [], staff: [],
+            
+            init() {
+                document.getElementById('saleDate').value = new Date().toISOString().split('T')[0];
+                this.showTab('new-sale', document.querySelector('#salePortal .tab-button'));
+                this.loadAllData();
+            },
+
+            async loadAllData() {
+                try {
+                    const [salesResp, staffResp] = await Promise.all([
+                        fetch('/.netlify/functions/get-sales-data'),
+                        fetch('/.netlify/functions/get-order-data')
+                    ]);
+                    
+                    if (!salesResp.ok) throw new Error("Failed to load sales data");
+                    const salesData = await salesResp.json();
+                    this.sales = (salesData.sales || []).map(s => ({...s, id: s.id}));
+                    this.sales.sort((a, b) => new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date));
+
+                    if (staffResp.ok) {
+                        const staffData = await staffResp.json();
+                        this.staff = (staffData.staff || []).map(s => ({...s, id: s.id}));
+                    }
+                    
+                    this.renderAll();
+                } catch (error) {
+                    showNotification(`Error: ${error.message}`, false);
+                }
+            },
+
+            showTab(tabName, element) {
+                document.querySelectorAll('#salePortal .tab-content').forEach(c => c.classList.remove('active'));
+                document.querySelectorAll('#salePortal .tab-button').forEach(b => b.classList.remove('active'));
+                document.getElementById(`sale-${tabName}`).classList.add('active');
+                element.classList.add('active');
+                if (tabName !== 'new-sale') {
+                    this.loadAllData();
+                }
+            },
+
+            renderAll() {
+                this.populateStaffDropdowns();
+                this.renderSales();
+            },
+
+            populateStaffDropdowns() {
+                const saleSalesPerson = document.getElementById('saleSalesPerson');
+                const filterStaff = document.getElementById('filterStaff');
+                if (!saleSalesPerson) return;
+
+                const staffOptions = this.staff.map(s => `<option value="${s.name}">${s.name}</option>`).join('');
+                saleSalesPerson.innerHTML = `<option value="">Select Staff</option>${staffOptions}`;
+                filterStaff.innerHTML = `<option value="all">All Staff</option>${staffOptions}`;
+            },
+
+            async handleNewSaleSubmit(e) {
+                e.preventDefault();
+                const form = e.target;
+                const button = form.querySelector('button[type="submit"]');
+                toggleButtonLoading(button, true, button.innerHTML);
+
+                const newSale = {
+                    boxNo: parseInt(form.elements.saleBoxNo.value),
+                    grossWeight: parseFloat(form.elements.saleGrossWeight.value),
+                    netWeight: parseFloat(form.elements.saleNetWeight.value),
+                    salesPerson: form.elements.saleSalesPerson.value,
+                    date: form.elements.saleDate.value,
+                    timestamp: new Date().toISOString()
+                };
+
+                try {
+                    const response = await fetch('/.netlify/functions/add-sale', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(newSale)
+                    });
+                    
+                    if (!response.ok) throw new Error("Server request failed");
+                    
+                    showNotification("Sale entry saved!", true);
+                    form.reset();
+                    document.getElementById('saleDate').value = new Date().toISOString().split('T')[0];
+                    await this.loadAllData();
+                } catch (error) {
+                    showNotification(`Error: ${error.message}`, false);
+                } finally {
+                    toggleButtonLoading(button, false, '<i class="fas fa-save"></i> Save Sale Entry');
+                }
+            },
+
+            getFilteredSales() {
+                const staffFilter = document.getElementById('filterStaff').value;
+                const startDate = document.getElementById('filterStartDate').value;
+                const endDate = document.getElementById('filterEndDate').value;
+                const boxFilter = document.getElementById('filterBoxNo').value.trim();
+
+                return this.sales.filter(sale => {
+                    const matchesStaff = (staffFilter === 'all') || (sale.salesPerson === staffFilter);
+                    const matchesBox = !boxFilter || (sale.boxNo.toString() === boxFilter);
+                    
+                    let matchesDate = true;
+                    if (startDate && sale.date < startDate) matchesDate = false;
+                    if (endDate && sale.date > endDate) matchesDate = false;
+
+                    return matchesStaff && matchesBox && matchesDate;
+                });
+            },
+
+            renderSales() {
+                const filtered = this.getFilteredSales();
+                const tableBody = document.getElementById('salesTableBody');
+                
+                let totalGross = 0;
+                let totalNet = 0;
+
+                if (filtered.length === 0) {
+                    tableBody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 2rem;">No matching sale entries.</td></tr>';
+                } else {
+                    tableBody.innerHTML = filtered.map(sale => {
+                        totalGross += sale.grossWeight || 0;
+                        totalNet += sale.netWeight || 0;
+                        const formattedDate = new Date(sale.date).toLocaleDateString('en-IN');
+                        return `
+                            <tr>
+                                <td>${formattedDate}</td>
+                                <td>Box ${sale.boxNo}</td>
+                                <td>${(sale.grossWeight || 0).toFixed(3)}g</td>
+                                <td>${(sale.netWeight || 0).toFixed(3)}g</td>
+                                <td>${sale.salesPerson}</td>
+                            </tr>
+                        `;
+                    }).join('');
+                }
+
+                document.getElementById('reportTotalSales').textContent = filtered.length;
+                document.getElementById('reportTotalGross').textContent = `${totalGross.toFixed(3)}g`;
+                document.getElementById('reportTotalNet').textContent = `${totalNet.toFixed(3)}g`;
+            },
+
+            exportPDF() {
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF();
+                
+                // Title
+                doc.setFont("Helvetica", "bold");
+                doc.setFontSize(18);
+                doc.setTextColor(12, 12, 12);
+                doc.text("Srikar Jewellers - Sales Report", 14, 20);
+                
+                // Date & Metadata
+                doc.setFont("Helvetica", "normal");
+                doc.setFontSize(10);
+                doc.setTextColor(100, 100, 100);
+                doc.text(`Generated: ${new Date().toLocaleString('en-IN')}`, 14, 27);
+                
+                // Filters description
+                const staffFilter = document.getElementById('filterStaff').value;
+                const startDate = document.getElementById('filterStartDate').value;
+                const endDate = document.getElementById('filterEndDate').value;
+                const boxFilter = document.getElementById('filterBoxNo').value.trim();
+                
+                let filterText = `Filters: Staff: ${staffFilter === 'all' ? 'All' : staffFilter}`;
+                if (startDate || endDate) filterText += ` | Range: ${startDate || 'Any'} to ${endDate || 'Any'}`;
+                if (boxFilter) filterText += ` | Box: ${boxFilter}`;
+                doc.text(filterText, 14, 33);
+                
+                // Table Data
+                const filtered = this.getFilteredSales();
+                let totalGross = 0;
+                let totalNet = 0;
+                
+                const tableRows = filtered.map(sale => {
+                    totalGross += sale.grossWeight || 0;
+                    totalNet += sale.netWeight || 0;
+                    return [
+                        new Date(sale.date).toLocaleDateString('en-IN'),
+                        `Box ${sale.boxNo}`,
+                        `${(sale.grossWeight || 0).toFixed(3)}g`,
+                        `${(sale.netWeight || 0).toFixed(3)}g`,
+                        sale.salesPerson
+                    ];
+                });
+                
+                // Add totals row
+                tableRows.push([
+                    "TOTALS",
+                    `${filtered.length} Sales`,
+                    `${totalGross.toFixed(3)}g`,
+                    `${totalNet.toFixed(3)}g`,
+                    ""
+                ]);
+                
+                doc.autoTable({
+                    startY: 38,
+                    head: [['Date', 'Box No.', 'Gross Weight (g)', 'Net Weight (g)', 'Sales Person']],
+                    body: tableRows,
+                    theme: 'striped',
+                    headStyles: { fillColor: [220, 202, 135], textColor: [12, 12, 12], fontStyle: 'bold' },
+                    footStyles: { fontStyle: 'bold' },
+                    didParseCell: function (data) {
+                        if (data.row.index === tableRows.length - 1) {
+                            data.cell.styles.fontStyle = 'bold';
+                            data.cell.styles.fillColor = [245, 239, 225];
+                        }
+                    }
+                });
+                
+                doc.save(`sales_report_${new Date().toISOString().split('T')[0]}.pdf`);
+                showNotification("PDF downloaded successfully!", true);
+            }
+        };
+
+        // ===================================================================================
+        // ============================== STOCK MANAGEMENT ==================================
+        // ===================================================================================
+        const stockApp = {
+            stock: [], sales: [],
+            
+            init() {
+                this.showTab('box-registry', document.querySelector('#stockPortal .tab-button'));
+                this.loadAllData();
+            },
+            
+            async loadAllData() {
+                try {
+                    const [stockResp, salesResp] = await Promise.all([
+                        fetch('/.netlify/functions/get-stock-data'),
+                        fetch('/.netlify/functions/get-sales-data')
+                    ]);
+                    
+                    if (!stockResp.ok) throw new Error("Failed to load stock data");
+                    if (!salesResp.ok) throw new Error("Failed to load sales data");
+                    
+                    const stockData = await stockResp.json();
+                    const salesData = await salesResp.json();
+                    
+                    this.stock = (stockData.stock || []).map(b => ({...b, id: b.id}));
+                    this.sales = (salesData.sales || []).map(s => ({...s, id: s.id}));
+                    
+                    this.stock.sort((a, b) => a.boxNo - b.boxNo);
+                    this.renderAll();
+                } catch (error) {
+                    showNotification(`Error: ${error.message}`, false);
+                }
+            },
+            
+            showTab(tabName, element) {
+                document.querySelectorAll('#stockPortal .tab-content').forEach(c => c.classList.remove('active'));
+                document.querySelectorAll('#stockPortal .tab-button').forEach(b => b.classList.remove('active'));
+                document.getElementById(`stock-${tabName}`).classList.add('active');
+                element.classList.add('active');
+                if (tabName !== 'box-registry') {
+                    this.loadAllData();
+                }
+            },
+            
+            renderAll() {
+                this.renderStockTable();
+            },
+            
+            calculateWatermark(box) {
+                const lastUpdate = box.lastManualUpdate ? new Date(box.lastManualUpdate) : new Date(0);
+                
+                const boxSales = this.sales.filter(sale => {
+                    if (parseInt(sale.boxNo) !== parseInt(box.boxNo)) return false;
+                    const saleTime = sale.timestamp ? new Date(sale.timestamp) : new Date(sale.date);
+                    return saleTime >= lastUpdate;
+                });
+                
+                const totalGrossSold = boxSales.reduce((sum, sale) => sum + (sale.grossWeight || 0), 0);
+                return Math.max(0, box.totalWeight - totalGrossSold);
+            },
+            
+            handleBoxNoInput(val) {
+                const boxNo = parseInt(val);
+                const msgEl = document.getElementById('boxNoMessage');
+                const totalWeightInput = document.getElementById('totalWeightInput');
+                const boxWeightInput = document.getElementById('boxWeightInput');
+                
+                if (isNaN(boxNo)) {
+                    msgEl.style.display = 'none';
+                    totalWeightInput.placeholder = "Weight with jewelry";
+                    return;
+                }
+                
+                const existing = this.stock.find(b => parseInt(b.boxNo) === boxNo);
+                if (existing) {
+                    const watermark = this.calculateWatermark(existing);
+                    msgEl.textContent = `Box ${boxNo} already exists. Editing will update its manual baseline.`;
+                    msgEl.style.display = 'block';
+                    
+                    boxWeightInput.value = existing.boxWeight;
+                    totalWeightInput.placeholder = `Watermark: ${watermark.toFixed(3)}g (Last: ${existing.totalWeight.toFixed(3)}g)`;
+                } else {
+                    msgEl.style.display = 'none';
+                    totalWeightInput.placeholder = "Weight with jewelry";
+                }
+            },
+            
+            async handleBoxSaveSubmit(e) {
+                e.preventDefault();
+                const form = e.target;
+                const button = form.querySelector('button[type="submit"]');
+                toggleButtonLoading(button, true, button.innerHTML);
+                
+                const boxData = {
+                    boxNo: parseInt(form.elements.boxNoInput.value),
+                    totalWeight: parseFloat(form.elements.totalWeightInput.value),
+                    boxWeight: parseFloat(form.elements.boxWeightInput.value)
+                };
+                
+                try {
+                    const response = await fetch('/.netlify/functions/save-box', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(boxData)
+                    });
+                    
+                    if (!response.ok) throw new Error("Failed to save box data");
+                    
+                    showNotification("Box registry updated successfully!", true);
+                    form.reset();
+                    document.getElementById('boxNoMessage').style.display = 'none';
+                    document.getElementById('totalWeightInput').placeholder = "Weight with jewelry";
+                    await this.loadAllData();
+                } catch (error) {
+                    showNotification(`Error: ${error.message}`, false);
+                } finally {
+                    toggleButtonLoading(button, false, '<i class="fas fa-save"></i> Save Box Weight');
+                }
+            },
+            
+            renderStockTable() {
+                const tableBody = document.getElementById('stockTableBody');
+                
+                if (this.stock.length === 0) {
+                    tableBody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 2rem;">No boxes registered.</td></tr>';
+                    return;
+                }
+                
+                tableBody.innerHTML = this.stock.map(box => {
+                    const watermarkWeight = this.calculateWatermark(box);
+                    const netJewelryWeight = Math.max(0, watermarkWeight - box.boxWeight);
+                    
+                    return `
+                        <tr>
+                            <td>Box ${box.boxNo}</td>
+                            <td>${box.totalWeight.toFixed(3)}g</td>
+                            <td>${box.boxWeight.toFixed(3)}g</td>
+                            <td><strong style="color: var(--gold-primary); font-size: 1.1rem;">${watermarkWeight.toFixed(3)}g</strong></td>
+                            <td>${netJewelryWeight.toFixed(3)}g</td>
+                        </tr>
+                    `;
+                }).join('');
+            }
+        };
+
+        // ===================================================================================
+        // ============================= SECURE AUTHORIZATION ===============================
+        // ===================================================================================
+        async function verifyStockPassword() {
+            const password = document.getElementById('stockPasswordInput').value;
+            const submitBtn = document.querySelector('#stockPasswordForm button[type="submit"]');
+            toggleButtonLoading(submitBtn, true);
+            
+            try {
+                const response = await fetch('/.netlify/functions/verify-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password })
+                });
+                
+                if (response.ok) {
+                    sessionStorage.setItem('stock_authorized', 'true');
+                    closePasswordModal();
+                    showNotification("Authorized successfully!", true);
+                    showPortal('stock');
+                } else {
+                    showNotification("Incorrect password. Access denied.", false);
+                }
+            } catch (error) {
+                showNotification(`Authorization error: ${error.message}`, false);
+            } finally {
+                toggleButtonLoading(submitBtn, false, 'Authorize');
+            }
+        }
+        
+        function closePasswordModal() {
+            document.getElementById('stockPasswordModal').classList.remove('show');
+        }
+        
+        function openChangePasswordModal() {
+            document.getElementById('currentPasswordInput').value = '';
+            document.getElementById('newPasswordInput').value = '';
+            document.getElementById('changePasswordModal').classList.add('show');
+        }
+        
+        function closeChangePasswordModal() {
+            document.getElementById('changePasswordModal').classList.remove('show');
+        }
+        
+        async function handlePasswordChange() {
+            const currentPassword = document.getElementById('currentPasswordInput').value;
+            const newPassword = document.getElementById('newPasswordInput').value;
+            const submitBtn = document.querySelector('#changePasswordForm button[type="submit"]');
+            
+            toggleButtonLoading(submitBtn, true);
+            
+            try {
+                const response = await fetch('/.netlify/functions/change-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ currentPassword, newPassword })
+                });
+                
+                const data = await response.json();
+                if (response.ok && data.success) {
+                    closeChangePasswordModal();
+                    showNotification("Password changed successfully!", true);
+                } else {
+                    showNotification(data.message || "Failed to change password.", false);
+                }
+            } catch (error) {
+                showNotification(`Error: ${error.message}`, false);
+            } finally {
+                toggleButtonLoading(submitBtn, false, 'Update Password');
+            }
+        }
+        
+        function checkStockPassword() {
+            if (sessionStorage.getItem('stock_authorized') === 'true') {
+                showPortal('stock');
+            } else {
+                document.getElementById('stockPasswordInput').value = '';
+                document.getElementById('stockPasswordModal').classList.add('show');
+            }
+        }
+        
+        document.getElementById('stockPasswordModal').addEventListener('click', (e) => {
+            if (e.target.id === 'stockPasswordModal') closePasswordModal();
+        });
+        document.getElementById('changePasswordModal').addEventListener('click', (e) => {
+            if (e.target.id === 'changePasswordModal') closeChangePasswordModal();
+        });
+        
+        // Expose functions globally for event handlers
+        window.verifyStockPassword = verifyStockPassword;
+        window.closePasswordModal = closePasswordModal;
+        window.openChangePasswordModal = openChangePasswordModal;
+        window.closeChangePasswordModal = closeChangePasswordModal;
+        window.handlePasswordChange = handlePasswordChange;
+        window.checkStockPassword = checkStockPassword;
+        window.saleApp = saleApp;
+        window.stockApp = stockApp;
+        
+        window.addEventListener('DOMContentLoaded', () => {
+            // DOM ready setup
+        });
     </script>
 </body>
 </html>
