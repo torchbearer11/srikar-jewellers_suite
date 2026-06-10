@@ -1147,16 +1147,20 @@
                     <form id="newSaleForm" onsubmit="saleApp.handleNewSaleSubmit(event)">
                         <div class="form-grid">
                             <div class="form-group">
-                                <label for="saleBoxNo">Box Number *</label>
-                                <input type="number" id="saleBoxNo" required min="1" placeholder="Enter Box No.">
+                                <label for="saleItemName">Item Name *</label>
+                                <input type="text" id="saleItemName" required placeholder="e.g. Gold Ring / Bangle">
+                            </div>
+                            <div class="form-group">
+                                <label for="saleBoxNo">Box Number</label>
+                                <input type="number" id="saleBoxNo" min="1" placeholder="Enter Box No. (Optional)">
                             </div>
                             <div class="form-group">
                                 <label for="saleGrossWeight">Gross Weight (g) *</label>
                                 <input type="number" id="saleGrossWeight" step="0.001" required min="0" placeholder="e.g. 15.550">
                             </div>
                             <div class="form-group">
-                                <label for="saleNetWeight">Net Weight (g) *</label>
-                                <input type="number" id="saleNetWeight" step="0.001" required min="0" placeholder="e.g. 14.200">
+                                <label for="saleNetWeight">Net Weight (g)</label>
+                                <input type="number" id="saleNetWeight" step="0.001" min="0" placeholder="e.g. 14.200 (Optional)">
                             </div>
                             <div class="form-group">
                                 <label for="saleSalesPerson">Sales Person *</label>
@@ -1170,7 +1174,7 @@
                             </div>
                         </div>
                         <div style="text-align: center; margin-top: 2rem;">
-                            <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save Sale Entry</button>
+                            <button type="submit" id="saveSaleBtn" class="btn btn-primary"><i class="fas fa-save"></i> Save Sale Entry</button>
                         </div>
                     </form>
                 </div>
@@ -1225,6 +1229,7 @@
                         <thead>
                             <tr>
                                 <th>Date</th>
+                                <th>Item Name</th>
                                 <th>Box No.</th>
                                 <th>Gross Weight (g)</th>
                                 <th>Net Weight (g)</th>
@@ -1233,7 +1238,7 @@
                             </tr>
                         </thead>
                         <tbody id="salesTableBody">
-                            <tr><td colspan="6" style="text-align:center; padding: 2rem;">No sale entries recorded.</td></tr>
+                            <tr><td colspan="7" style="text-align:center; padding: 2rem;">No sale entries recorded.</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -1249,9 +1254,12 @@
                 <div class="logo-container"><img src="logo.jpeg" alt="Logo" class="logo"></div>
                 <button class="btn btn-secondary" onclick="showPortalSelection()"><i class="fas fa-home"></i> Main Menu</button>
             </header>
-            <div class="nav-tabs">
-                <button class="tab-button active" onclick="stockApp.showTab('box-registry', this)"><i class="fas fa-box-open"></i> Register Box</button>
-                <button class="tab-button" onclick="stockApp.showTab('current-stock', this)"><i class="fas fa-boxes-stacked"></i> Current Stock</button>
+            <div class="nav-tabs" style="justify-content: space-between; align-items: center; display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 0.5rem 1rem;">
+                <div style="display: flex; gap: 1rem;">
+                    <button class="tab-button active" onclick="stockApp.showTab('box-registry', this)"><i class="fas fa-box-open"></i> Register Box</button>
+                    <button class="tab-button" onclick="stockApp.showTab('current-stock', this)"><i class="fas fa-boxes-stacked"></i> Current Stock</button>
+                </div>
+                <button class="btn btn-secondary" style="padding: 0.5rem 1rem; border-color: rgba(220, 202, 135, 0.3); font-size: 0.9rem;" onclick="stockApp.openChangePasswordModal()"><i class="fas fa-key"></i> Change Password</button>
             </div>
             
             <div id="stock-box-registry" class="tab-content active">
@@ -1335,6 +1343,44 @@
         </div>
     </div>
     
+    <!-- Stock Password Protection Modal -->
+    <div id="stockPasswordModal" class="modal-premium">
+        <div class="modal-content" style="max-width: 400px; text-align: center;">
+            <h2 class="section-title" style="font-size: 1.8rem; margin-bottom: 1.5rem;"><i class="fas fa-lock" style="color: var(--gold-primary);"></i> Stock Management</h2>
+            <p style="margin-bottom: 1.5rem; color: var(--text-secondary);">This area is password protected. Please enter your password to gain access.</p>
+            <form id="stockPasswordForm" onsubmit="stockApp.handleStockPasswordSubmit(event)">
+                <div class="form-group" style="margin-bottom: 1.5rem;">
+                    <input type="password" id="stockPasswordInput" required placeholder="Enter password" style="text-align: center;">
+                </div>
+                <div style="display: flex; gap: 1rem; justify-content: center;">
+                    <button type="submit" class="btn btn-primary">Submit</button>
+                    <button type="button" class="btn btn-secondary" onclick="stockApp.closeStockPasswordModal()">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Change Password Modal -->
+    <div id="changePasswordModal" class="modal-premium">
+        <div class="modal-content" style="max-width: 450px;">
+            <h2 class="section-title" style="font-size: 1.8rem; margin-bottom: 1.5rem;"><i class="fas fa-key" style="color: var(--gold-primary);"></i> Change Password</h2>
+            <form id="changePasswordForm" onsubmit="stockApp.handleStockPasswordChange(event)">
+                <div class="form-group" style="margin-bottom: 1.2rem;">
+                    <label for="currentPasswordInput">Current Password</label>
+                    <input type="password" id="currentPasswordInput" required placeholder="Enter current password">
+                </div>
+                <div class="form-group" style="margin-bottom: 1.5rem;">
+                    <label for="newPasswordInput">New Password</label>
+                    <input type="password" id="newPasswordInput" required placeholder="Enter new password">
+                </div>
+                <div style="display: flex; gap: 1rem; justify-content: center;">
+                    <button type="submit" class="btn btn-primary">Update</button>
+                    <button type="button" class="btn btn-secondary" onclick="stockApp.closeChangePasswordModal()">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
     <script>
         // === GLOBAL UTILITIES (Shared by all apps) ===
         function showNotification(message, isSuccess = true) {
@@ -1402,8 +1448,13 @@
                 salePortal.style.display = 'block';
                 if (!isSaleInitialized) { saleApp.init(); isSaleInitialized = true; }
             } else if (portalName === 'stock') {
-                stockPortal.style.display = 'block';
-                if (!isStockInitialized) { stockApp.init(); isStockInitialized = true; }
+                if (sessionStorage.getItem('stockAuth') === 'true') {
+                    stockPortal.style.display = 'block';
+                    if (!isStockInitialized) { stockApp.init(); isStockInitialized = true; }
+                } else {
+                    document.getElementById('stockPasswordModal').classList.add('show');
+                    document.getElementById('stockPasswordInput').focus();
+                }
             }
         }
 
@@ -2025,35 +2076,47 @@
             async handleNewSaleSubmit(e) {
                 e.preventDefault();
                 const form = e.target;
-                const button = form.querySelector('button[type="submit"]');
+                const button = document.getElementById('saveSaleBtn');
                 toggleButtonLoading(button, true, button.innerHTML);
 
                 const newSale = {
-                    boxNo: parseInt(form.elements.saleBoxNo.value),
+                    itemName: form.elements.saleItemName.value.trim(),
+                    boxNo: form.elements.saleBoxNo.value ? parseInt(form.elements.saleBoxNo.value) : null,
                     grossWeight: parseFloat(form.elements.saleGrossWeight.value),
-                    netWeight: parseFloat(form.elements.saleNetWeight.value),
+                    netWeight: form.elements.saleNetWeight.value ? parseFloat(form.elements.saleNetWeight.value) : null,
                     salesPerson: form.elements.saleSalesPerson.value,
-                    date: form.elements.saleDate.value,
-                    timestamp: new Date().toISOString()
+                    date: form.elements.saleDate.value
                 };
 
                 try {
-                    const response = await fetch('/.netlify/functions/add-sale', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(newSale)
-                    });
+                    let response;
+                    if (this.editingSaleId) {
+                        response = await fetch('/.netlify/functions/update-sale', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ id: this.editingSaleId, data: newSale })
+                        });
+                    } else {
+                        response = await fetch('/.netlify/functions/add-sale', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(newSale)
+                        });
+                    }
                     
                     if (!response.ok) throw new Error("Server request failed");
                     
-                    showNotification("Sale entry saved!", true);
+                    showNotification(this.editingSaleId ? "Sale entry updated!" : "Sale entry saved!", true);
+                    
+                    this.editingSaleId = null;
                     form.reset();
+                    button.innerHTML = '<i class="fas fa-save"></i> Save Sale Entry';
                     document.getElementById('saleDate').value = new Date().toISOString().split('T')[0];
                     await this.loadAllData();
                 } catch (error) {
                     showNotification(`Error: ${error.message}`, false);
                 } finally {
-                    toggleButtonLoading(button, false, '<i class="fas fa-save"></i> Save Sale Entry');
+                    toggleButtonLoading(button, false, this.editingSaleId ? '<i class="fas fa-save"></i> Update Sale Entry' : '<i class="fas fa-save"></i> Save Sale Entry');
                 }
             },
 
@@ -2065,7 +2128,7 @@
 
                 return this.sales.filter(sale => {
                     const matchesStaff = (staffFilter === 'all') || (sale.salesPerson === staffFilter);
-                    const matchesBox = !boxFilter || (sale.boxNo.toString() === boxFilter);
+                    const matchesBox = !boxFilter || (sale.boxNo && sale.boxNo.toString() === boxFilter);
                     
                     let matchesDate = true;
                     if (startDate && sale.date < startDate) matchesDate = false;
@@ -2083,7 +2146,7 @@
                 let totalNet = 0;
 
                 if (filtered.length === 0) {
-                    tableBody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 2rem;">No matching sale entries.</td></tr>';
+                    tableBody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding: 2rem;">No matching sale entries.</td></tr>';
                 } else {
                     tableBody.innerHTML = filtered.map(sale => {
                         totalGross += sale.grossWeight || 0;
@@ -2092,12 +2155,16 @@
                         return `
                             <tr>
                                 <td>${formattedDate}</td>
-                                <td>Box ${sale.boxNo}</td>
+                                <td>${sale.itemName || 'N/A'}</td>
+                                <td>${sale.boxNo ? `Box ${sale.boxNo}` : 'N/A'}</td>
                                 <td>${(sale.grossWeight || 0).toFixed(3)}g</td>
-                                <td>${(sale.netWeight || 0).toFixed(3)}g</td>
+                                <td>${sale.netWeight ? `${sale.netWeight.toFixed(3)}g` : 'N/A'}</td>
                                 <td>${sale.salesPerson}</td>
                                 <td>
-                                    <button class="btn btn-danger btn-sm" style="padding:0.2rem 0.6rem;" onclick="saleApp.deleteSale('${sale.id}')"><i class="fas fa-trash"></i> Delete</button>
+                                    <div style="display:flex; gap:0.5rem; justify-content:center;">
+                                        <button class="btn btn-secondary btn-sm" style="padding:0.2rem 0.5rem;" onclick="saleApp.editSale('${sale.id}')"><i class="fas fa-edit"></i> Edit</button>
+                                        <button class="btn btn-danger btn-sm" style="padding:0.2rem 0.5rem;" onclick="saleApp.deleteSale('${sale.id}')"><i class="fas fa-trash"></i> Delete</button>
+                                    </div>
                                 </td>
                             </tr>
                         `;
@@ -2146,9 +2213,10 @@
                     totalNet += sale.netWeight || 0;
                     return [
                         new Date(sale.date).toLocaleDateString('en-IN'),
-                        `Box ${sale.boxNo}`,
+                        sale.itemName || 'N/A',
+                        sale.boxNo ? `Box ${sale.boxNo}` : 'N/A',
                         `${(sale.grossWeight || 0).toFixed(3)}g`,
-                        `${(sale.netWeight || 0).toFixed(3)}g`,
+                        sale.netWeight ? `${sale.netWeight.toFixed(3)}g` : 'N/A',
                         sale.salesPerson
                     ];
                 });
@@ -2156,6 +2224,7 @@
                 // Add totals row
                 tableRows.push([
                     "TOTALS",
+                    "",
                     `${filtered.length} Sales`,
                     `${totalGross.toFixed(3)}g`,
                     `${totalNet.toFixed(3)}g`,
@@ -2164,7 +2233,7 @@
                 
                 doc.autoTable({
                     startY: 38,
-                    head: [['Date', 'Box No.', 'Gross Weight (g)', 'Net Weight (g)', 'Sales Person']],
+                    head: [['Date', 'Item Name', 'Box No.', 'Gross Weight (g)', 'Net Weight (g)', 'Sales Person']],
                     body: tableRows,
                     theme: 'striped',
                     headStyles: { fillColor: [220, 202, 135], textColor: [12, 12, 12], fontStyle: 'bold' },
@@ -2179,6 +2248,31 @@
                 
                 doc.save(`sales_report_${new Date().toISOString().split('T')[0]}.pdf`);
                 showNotification("PDF downloaded successfully!", true);
+            },
+            
+            editSale(id) {
+                const sale = this.sales.find(s => s.id === id);
+                if (!sale) return;
+                
+                this.editingSaleId = id;
+                
+                // Populate the fields
+                document.getElementById('saleItemName').value = sale.itemName || '';
+                document.getElementById('saleBoxNo').value = sale.boxNo !== null && sale.boxNo !== undefined ? sale.boxNo : '';
+                document.getElementById('saleGrossWeight').value = sale.grossWeight || 0;
+                document.getElementById('saleNetWeight').value = sale.netWeight !== null && sale.netWeight !== undefined ? sale.netWeight : '';
+                document.getElementById('saleSalesPerson').value = sale.salesPerson || '';
+                document.getElementById('saleDate').value = sale.date || '';
+                
+                // Update save button text
+                const saveSaleBtn = document.getElementById('saveSaleBtn');
+                if (saveSaleBtn) {
+                    saveSaleBtn.innerHTML = '<i class="fas fa-save"></i> Update Sale Entry';
+                }
+                
+                // Switch active tab to New Sale
+                const tabButtons = document.querySelectorAll('#salePortal .tab-button');
+                this.showTab('new-sale', tabButtons[0]);
             },
             
             async deleteSale(id) {
@@ -2450,6 +2544,84 @@
                         </tr>
                     `;
                 }).join('');
+            },
+
+            openChangePasswordModal() {
+                document.getElementById('changePasswordModal').classList.add('show');
+            },
+
+            closeChangePasswordModal() {
+                document.getElementById('changePasswordModal').classList.remove('show');
+                document.getElementById('changePasswordForm').reset();
+            },
+
+            closeStockPasswordModal() {
+                document.getElementById('stockPasswordModal').classList.remove('show');
+                document.getElementById('stockPasswordForm').reset();
+                showPortalSelection();
+            },
+
+            async handleStockPasswordSubmit(e) {
+                e.preventDefault();
+                const form = e.target;
+                const password = document.getElementById('stockPasswordInput').value;
+                const button = form.querySelector('button[type="submit"]');
+                toggleButtonLoading(button, true, button.innerHTML);
+
+                try {
+                    const response = await fetch('/.netlify/functions/verify-password', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ password })
+                    });
+                    
+                    const result = await response.json();
+                    if (!response.ok) {
+                        throw new Error(result.message || "Failed to verify password");
+                    }
+                    
+                    if (result.valid) {
+                        sessionStorage.setItem('stockAuth', 'true');
+                        document.getElementById('stockPasswordModal').classList.remove('show');
+                        form.reset();
+                        showPortal('stock');
+                    } else {
+                        showNotification("Incorrect password", false);
+                    }
+                } catch (error) {
+                    showNotification(`Error: ${error.message}`, false);
+                } finally {
+                    toggleButtonLoading(button, false, 'Submit');
+                }
+            },
+
+            async handleStockPasswordChange(e) {
+                e.preventDefault();
+                const form = e.target;
+                const currentPassword = document.getElementById('currentPasswordInput').value;
+                const newPassword = document.getElementById('newPasswordInput').value;
+                const button = form.querySelector('button[type="submit"]');
+                toggleButtonLoading(button, true, button.innerHTML);
+
+                try {
+                    const response = await fetch('/.netlify/functions/change-password', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ currentPassword, newPassword })
+                    });
+                    
+                    const result = await response.json();
+                    if (!response.ok) {
+                        throw new Error(result.message || "Failed to change password");
+                    }
+                    
+                    showNotification("Password updated successfully!", true);
+                    this.closeChangePasswordModal();
+                } catch (error) {
+                    showNotification(`Error: ${error.message}`, false);
+                } finally {
+                    toggleButtonLoading(button, false, 'Update');
+                }
             }
         };
 
